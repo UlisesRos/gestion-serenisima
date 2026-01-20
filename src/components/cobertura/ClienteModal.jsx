@@ -27,18 +27,21 @@ function ClienteModal({ isOpen, onClose, onSave, cliente }) {
   const frecuenciaRef = useRef(null);
 
   useEffect(() => {
-    if (cliente) {
-      setFormData({
-        nombre: cliente.nombre,
-        apellido: cliente.apellido,
-        frecuencia: cliente.frecuencia,
-      });
-    } else {
-      setFormData({
-        nombre: '',
-        apellido: '',
-        frecuencia: 'LMV',
-      });
+    if (isOpen) {
+      if (cliente) {
+        // eslint-disable-next-line
+        setFormData({
+          nombre: cliente.nombre,
+          apellido: cliente.apellido,
+          frecuencia: cliente.frecuencia,
+        });
+      } else {
+        setFormData({
+          nombre: '',
+          apellido: '',
+          frecuencia: 'LMV',
+        });
+      }
     }
   }, [cliente, isOpen]);
 

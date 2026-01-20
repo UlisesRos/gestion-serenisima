@@ -15,12 +15,15 @@ import {
   Progress,
   CircularProgress,
   CircularProgressLabel,
+  Spinner,
 } from '@chakra-ui/react';
 import { ArrowBackIcon, AddIcon, DeleteIcon } from '@chakra-ui/icons';
 import ProductoModal from './ProductoModal';
+import { coberturasService } from '../../services/coberturasService';
 
 function ProductosCobertura({ cliente, onBack }) {
-  const [productos, setProductos] = useState([]);
+  const [clienteData, setClienteData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
@@ -29,78 +32,120 @@ function ProductosCobertura({ cliente, onBack }) {
 
   // Cargar productos del cliente al montar
   useEffect(() => {
-    loadProductos();
-  }, [cliente]);
+    loadCliente();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cliente._id]);
 
-  const loadProductos = () => {
-    const key = `productos_cliente_${cliente._id}`;
-    const stored = localStorage.getItem(key);
-    
-    if (stored) {
-      setProductos(JSON.parse(stored));
-    } else {
-      // Mock data inicial para pruebas
-      const mockProductos = [
-        { id: '1', codigo: '123456', completado: false },
-        { id: '2', codigo: '789012', completado: false },
-        { id: '3', codigo: '345678', completado: true },
-        { id: '4', codigo: '901234', completado: true },
-        { id: '5', codigo: '567890', completado: false },
-      ];
-      setProductos(mockProductos);
-      localStorage.setItem(key, JSON.stringify(mockProductos));
+  const loadCliente = async () => {
+    setIsLoading(true);
+    try {
+      const data = await coberturasService.getCliente(cliente._id);
+      setClienteData(data);
+    } catch (error) {
+      console.error(error)
+      toast({
+        title: 'Error al cargar productos',
+        description: 'No se pudieron cargar los productos del cliente',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const saveProductos = (productosData) => {
-    const key = `productos_cliente_${cliente._id}`;
-    localStorage.setItem(key, JSON.stringify(productosData));
-  };
-
-  const handleAddProducto = (codigo) => {
-    const nuevoProducto = {
-      id: Date.now().toString(),
-      codigo: codigo,
-      completado: false,
-    };
-
-    const updatedProductos = [...productos, nuevoProducto];
-    setProductos(updatedProductos);
-    saveProductos(updatedProductos);
-
-    toast({
-      title: 'Producto agregado',
-      status: 'success',
-      duration: 2000,
-      isClosable: true,
-    });
-    onClose();
-  };
-
-  const handleToggleProducto = (id) => {
-    const updatedProductos = productos.map((p) =>
-      p.id === id ? { ...p, completado: !p.completado } : p
-    );
-    setProductos(updatedProductos);
-    saveProductos(updatedProductos);
-  };
-
-  const handleDeleteProducto = (id, e) => {
-    e.stopPropagation();
-    
-    if (window.confirm('¿Eliminar este producto?')) {
-      const updatedProductos = productos.filter((p) => p.id !== id);
-      setProductos(updatedProductos);
-      saveProductos(updatedProductos);
-
+  const handleAddProducto = async (codigo) => {
+    try {
+      await coberturasService.addProducto(cliente._id, codigo);
       toast({
-        title: 'Producto eliminado',
+        title: 'Producto agregado',
         status: 'success',
         duration: 2000,
         isClosable: true,
       });
+      loadCliente();
+      onClose();
+    } catch (error) {
+      console.error(error)
+      toast({
+        title: 'Error al agregar producto',
+        description: 'No se pudo agregar el producto',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
+
+  const handleToggleProducto = async (producto) => {
+    try {
+      // Verificar que el producto tenga _id
+      if (!producto._id) {
+        console.error('Producto sin _id:', producto);
+        toast({
+          title: 'Error',
+          description: 'El producto no tiene un ID válido',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      await coberturasService.updateProducto(
+        cliente._id, 
+        producto._id, 
+        !producto.completado
+      );
+      loadCliente();
+    } catch (error) {
+      console.error('Error al actualizar producto:', error);
+      toast({
+        title: 'Error al actualizar producto',
+        description: 'No se pudo actualizar el estado del producto',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleDeleteProducto = async (productoId, e) => {
+    e.stopPropagation();
+    
+    if (window.confirm('¿Eliminar este producto?')) {
+      try {
+        await coberturasService.deleteProducto(cliente._id, productoId);
+        toast({
+          title: 'Producto eliminado',
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+        });
+        loadCliente();
+      } catch (error) {
+        console.error(error)
+        toast({
+          title: 'Error al eliminar',
+          description: 'No se pudo eliminar el producto',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    }
+  };
+
+  if (isLoading || !clienteData) {
+    return (
+      <Box minH="100vh" bg="white" display="flex" alignItems="center" justifyContent="center">
+        <Spinner size="xl" color="secondary.500" thickness="4px" />
+      </Box>
+    );
+  }
+
+  const productos = clienteData.productos || [];
 
   // Calcular estadísticas
   const productosPendientes = productos.filter((p) => !p.completado);
@@ -129,7 +174,7 @@ function ProductosCobertura({ cliente, onBack }) {
                 aria-label="Volver"
               />
               <Heading size={{ base: 'md', md: 'lg' }}>
-                {cliente.nombre} {cliente.apellido}
+                {clienteData.nombre} {clienteData.apellido}
               </Heading>
             </HStack>
             <Text fontSize={{ base: 'sm', md: 'md' }} pl={12} opacity={0.9}>
@@ -232,9 +277,12 @@ function ProductosCobertura({ cliente, onBack }) {
               {productosOrdenados.map((producto, index) => {
                 const borderColor = borderColors[index % borderColors.length];
                 
+                // Usar _id como key
+                const productoKey = producto._id || `producto-${index}`;
+                
                 return (
                   <Flex
-                    key={producto.id}
+                    key={productoKey}
                     align="center"
                     gap={3}
                     position="relative"
@@ -284,7 +332,7 @@ function ProductosCobertura({ cliente, onBack }) {
                             size="sm"
                             colorScheme="red"
                             variant="ghost"
-                            onClick={(e) => handleDeleteProducto(producto.id, e)}
+                            onClick={(e) => handleDeleteProducto(producto._id, e)}
                             aria-label="Eliminar producto"
                           />
                         </HStack>
@@ -296,7 +344,7 @@ function ProductosCobertura({ cliente, onBack }) {
                       size="lg"
                       colorScheme="green"
                       isChecked={producto.completado}
-                      onChange={() => handleToggleProducto(producto.id)}
+                      onChange={() => handleToggleProducto(producto)}
                       borderColor="gray.400"
                       sx={{
                         '& .chakra-checkbox__control': {

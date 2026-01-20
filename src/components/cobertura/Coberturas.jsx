@@ -15,31 +15,11 @@ import {
   Flex,
   InputGroup,
   InputLeftElement,
+  Spinner,
 } from '@chakra-ui/react';
 import { ArrowBackIcon, AddIcon, SearchIcon, EditIcon, DeleteIcon } from '@chakra-ui/icons';
 import ClienteModal from './ClienteModal';
-
-// Mock data inicial (solo para pruebas)
-const MOCK_CLIENTES_INICIAL = [
-  {
-    _id: '1',
-    nombre: 'Juan',
-    apellido: 'Pérez',
-    frecuencia: 'LMV'
-  },
-  {
-    _id: '2',
-    nombre: 'María',
-    apellido: 'González',
-    frecuencia: 'MJS'
-  },
-  {
-    _id: '3',
-    nombre: 'Carlos',
-    apellido: 'Rodríguez',
-    frecuencia: 'LMV'
-  },
-];
+import { coberturasService } from '../../services/coberturasService';
 
 function Coberturas({ onBack, onVerProductos }) {
   const [clientes, setClientes] = useState([]);
@@ -47,6 +27,7 @@ function Coberturas({ onBack, onVerProductos }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [frecuenciaFilter, setFrecuenciaFilter] = useState('todos');
   const [selectedCliente, setSelectedCliente] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
@@ -57,28 +38,32 @@ function Coberturas({ onBack, onVerProductos }) {
   // Cargar clientes al montar el componente
   useEffect(() => {
     loadClientes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filtrar clientes cuando cambian los filtros
   useEffect(() => {
     filterClientes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, frecuenciaFilter, clientes]);
 
-  const loadClientes = () => {
-    // Intentar cargar desde localStorage
-    const stored = localStorage.getItem('coberturas_clientes');
-    
-    if (stored) {
-      setClientes(JSON.parse(stored));
-    } else {
-      // Si no hay datos, usar mock data inicial
-      setClientes(MOCK_CLIENTES_INICIAL);
-      localStorage.setItem('coberturas_clientes', JSON.stringify(MOCK_CLIENTES_INICIAL));
+  const loadClientes = async () => {
+    setIsLoading(true);
+    try {
+      const data = await coberturasService.getAllClientes();
+      setClientes(data);
+    } catch (error) {
+      console.error(error)
+      toast({
+        title: 'Error al cargar clientes',
+        description: 'No se pudieron cargar los clientes del servidor',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const saveToLocalStorage = (data) => {
-    localStorage.setItem('coberturas_clientes', JSON.stringify(data));
   };
 
   const filterClientes = () => {
@@ -112,56 +97,63 @@ function Coberturas({ onBack, onVerProductos }) {
     onOpen();
   };
 
-  const handleDeleteCliente = (id, e) => {
+  const handleDeleteCliente = async (id, e) => {
     e.stopPropagation();
     
     if (window.confirm('¿Estás seguro de eliminar este cliente?')) {
-      const updatedClientes = clientes.filter((c) => c._id !== id);
-      setClientes(updatedClientes);
-      saveToLocalStorage(updatedClientes);
-      
-      toast({
-        title: 'Cliente eliminado',
-        status: 'success',
-        duration: 2000,
-        isClosable: true,
-      });
+      try {
+        await coberturasService.deleteCliente(id);
+        toast({
+          title: 'Cliente eliminado',
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+        });
+        loadClientes();
+      } catch (error) {
+        console.error(error)
+        toast({
+          title: 'Error al eliminar',
+          description: 'No se pudo eliminar el cliente',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
     }
   };
 
-  const handleSaveCliente = (clienteData) => {
-    if (selectedCliente) {
-      // Editar cliente existente
-      const updatedClientes = clientes.map((c) =>
-        c._id === selectedCliente._id ? { ...c, ...clienteData } : c
-      );
-      setClientes(updatedClientes);
-      saveToLocalStorage(updatedClientes);
-      
+  const handleSaveCliente = async (clienteData) => {
+    try {
+      if (selectedCliente) {
+        await coberturasService.updateCliente(selectedCliente._id, clienteData);
+        toast({
+          title: 'Cliente actualizado',
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+        });
+      } else {
+        await coberturasService.createCliente(clienteData);
+        toast({
+          title: 'Cliente agregado',
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+        });
+      }
+      loadClientes();
+      onClose();
+    } catch (error) {
+      console.error(error)
       toast({
-        title: 'Cliente actualizado',
-        status: 'success',
-        duration: 2000,
-        isClosable: true,
-      });
-    } else {
-      // Agregar nuevo cliente
-      const newCliente = {
-        _id: Date.now().toString(), // ID temporal
-        ...clienteData,
-      };
-      const updatedClientes = [...clientes, newCliente];
-      setClientes(updatedClientes);
-      saveToLocalStorage(updatedClientes);
-      
-      toast({
-        title: 'Cliente agregado',
-        status: 'success',
-        duration: 2000,
+        title: 'Error al guardar',
+        description: 'No se pudo guardar el cliente',
+        status: 'error',
+        duration: 3000,
         isClosable: true,
       });
     }
-    onClose();
   };
 
   const handleClienteClick = (cliente) => {
@@ -234,7 +226,11 @@ function Coberturas({ onBack, onVerProductos }) {
           </VStack>
 
           {/* Lista de Clientes - Estilo Timeline */}
-          {filteredClientes.length === 0 ? (
+          {isLoading ? (
+            <Flex justify="center" py={8}>
+              <Spinner size="xl" color="secondary.500" thickness="4px" />
+            </Flex>
+          ) : filteredClientes.length === 0 ? (
             <Text textAlign="center" color="gray.500" py={8}>
               {searchTerm || frecuenciaFilter !== 'todos' 
                 ? 'No se encontraron clientes con esos filtros'

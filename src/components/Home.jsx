@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { Box, Container, Heading, VStack, Button, Image } from '@chakra-ui/react';
 import logo from '../img/logoSere.png'
-import Coberturas from './Coberturas';
-import ProductosCobertura from './ProductosCobertura';
+import Coberturas from './cobertura/Coberturas';
+import ProductosCobertura from './cobertura/ProductosCobertura';
+import Devoluciones from './devolucion/Devoluciones';
 
 function Home() {
   const [currentView, setCurrentView] = useState('home');
   const [selectedCliente, setSelectedCliente] = useState(null);
 
   const handleDevoluciones = () => {
-    console.log('Ir a Devoluciones');
-    // Aquí después agregaremos la navegación a Devoluciones
+    setCurrentView('devoluciones');
   };
 
   const handleCoberturas = () => {
@@ -32,7 +32,11 @@ function Home() {
     setSelectedCliente(null);
   };
 
-  // Renderizar la vista actual
+  // Renderizar vistas
+  if (currentView === 'devoluciones') {
+    return <Devoluciones onBack={handleBackToHome} />;
+  }
+
   if (currentView === 'productos' && selectedCliente) {
     return (
       <ProductosCobertura 
@@ -79,7 +83,7 @@ function Home() {
           {/* Logo */}
           <Box w="100%" px={{ base: 4, md: 8 }}>
             <Image 
-              src={logo}
+              src={logo} 
               alt="La Serenísima Logo" 
               maxW={{ base: "280px", sm: "350px", md: "400px" }}
               w="100%"
