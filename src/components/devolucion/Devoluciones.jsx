@@ -128,11 +128,29 @@ function Devoluciones({ onBack }) {
   };
 
   const handleToggleProducto = async (devolucionId, productoId) => {
+    // OPTIMIZACIÓN: Actualizar el estado LOCAL primero (instantáneo)
+    setDevoluciones(prevDevoluciones => 
+      prevDevoluciones.map(dev => {
+        if (dev._id === devolucionId) {
+          return {
+            ...dev,
+            productos: dev.productos.map(prod => 
+              prod._id === productoId 
+                ? { ...prod, completado: !prod.completado }
+                : prod
+            )
+          };
+        }
+        return dev;
+      })
+    );
+
+    // Luego sincronizar con el servidor en segundo plano
     try {
       await devolucionesService.toggleProducto(devolucionId, productoId);
-      // Recargar devoluciones para actualizar el estado
-      loadDevoluciones();
     } catch {
+      // Si falla, revertir el cambio y mostrar error
+      loadDevoluciones(); // Recargar del servidor
       toast({
         title: 'Error al actualizar producto',
         description: 'No se pudo actualizar el estado del producto',

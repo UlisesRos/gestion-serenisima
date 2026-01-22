@@ -29,11 +29,10 @@ import { coberturasService } from '../../services/coberturasService';
 function ProductosCobertura({ cliente, onBack }) {
   const [clienteData, setClienteData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [tabIndex, setTabIndex] = useState(0); // Mantener el tab activo
+  const [tabIndex, setTabIndex] = useState(0);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
-  // Colores para los bordes
   const borderColors = ['#ff9800', '#9c27b0', '#f44336', '#ffeb3b', '#e91e63', '#00bcd4'];
 
   useEffect(() => {
@@ -68,9 +67,12 @@ function ProductosCobertura({ cliente, onBack }) {
       const tipo = getTipoActual();
       
       if (tipo === 'danone') {
-        await coberturasService.addProductoDanone(cliente._id, codigo);
+        const updated = await coberturasService.addProductoDanone(cliente._id, codigo);
+        // Actualizar estado local con la respuesta del servidor
+        setClienteData(updated);
       } else {
-        await coberturasService.addProductoMastellone(cliente._id, codigo);
+        const updated = await coberturasService.addProductoMastellone(cliente._id, codigo);
+        setClienteData(updated);
       }
       
       toast({
@@ -79,9 +81,6 @@ function ProductosCobertura({ cliente, onBack }) {
         duration: 1500,
         isClosable: true,
       });
-      
-      // Recargar datos MANTENIENDO el tab activo
-      await loadCliente();
       
     } catch {
       toast({
@@ -108,7 +107,19 @@ function ProductosCobertura({ cliente, onBack }) {
       }
 
       const tipo = getTipoActual();
+      const listKey = tipo === 'danone' ? 'productosDanone' : 'productosMastellone';
       
+      // OPTIMIZACIÓN: Actualizar estado local primero (instantáneo)
+      setClienteData(prev => ({
+        ...prev,
+        [listKey]: prev[listKey].map(p => 
+          p._id === producto._id 
+            ? { ...p, completado: !p.completado }
+            : p
+        )
+      }));
+
+      // Sincronizar con servidor en segundo plano
       if (tipo === 'danone') {
         await coberturasService.updateProductoDanone(
           cliente._id,
@@ -123,10 +134,10 @@ function ProductosCobertura({ cliente, onBack }) {
         );
       }
       
-      // Recargar datos MANTENIENDO el tab activo
-      await loadCliente();
-      
-    } catch {
+    } catch (error) {
+      // Si falla, recargar del servidor
+      loadCliente();
+      console.error('Error al actualizar producto:', error);
       toast({
         title: 'Error al actualizar producto',
         description: 'No se pudo actualizar el estado del producto',
@@ -145,9 +156,11 @@ function ProductosCobertura({ cliente, onBack }) {
         const tipo = getTipoActual();
         
         if (tipo === 'danone') {
-          await coberturasService.deleteProductoDanone(cliente._id, productoId);
+          const updated = await coberturasService.deleteProductoDanone(cliente._id, productoId);
+          setClienteData(updated);
         } else {
-          await coberturasService.deleteProductoMastellone(cliente._id, productoId);
+          const updated = await coberturasService.deleteProductoMastellone(cliente._id, productoId);
+          setClienteData(updated);
         }
         
         toast({
@@ -156,9 +169,6 @@ function ProductosCobertura({ cliente, onBack }) {
           duration: 2000,
           isClosable: true,
         });
-        
-        // Recargar datos MANTENIENDO el tab activo
-        await loadCliente();
         
       } catch {
         toast({
@@ -184,7 +194,6 @@ function ProductosCobertura({ cliente, onBack }) {
     );
   }
 
-  // Obtener productos según el tab actual
   const productosDanone = clienteData.productosDanone || [];
   const productosMastellone = clienteData.productosMastellone || [];
 
@@ -217,7 +226,7 @@ function ProductosCobertura({ cliente, onBack }) {
       <Container maxW="container.lg" px={4} py={6}>
         <VStack spacing={6} align="stretch">
           
-          {/* Tabs Danone / Mastellone - CONTROLADO */}
+          {/* Tabs Danone / Mastellone */}
           <Tabs 
             index={tabIndex}
             onChange={handleTabChange} 
@@ -283,7 +292,6 @@ function ProductList({
   onDelete,
   onAddProducto
 }) {
-  // Calcular estadísticas
   const productosPendientes = productos.filter((p) => !p.completado);
   const productosCompletados = productos.filter((p) => p.completado);
   const totalProductos = productos.length;
@@ -291,7 +299,6 @@ function ProductList({
     ? Math.round((productosCompletados.length / totalProductos) * 100) 
     : 0;
 
-  // Ordenar: pendientes arriba, completados abajo
   const productosOrdenados = [...productosPendientes, ...productosCompletados];
 
   return (
