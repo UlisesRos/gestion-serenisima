@@ -98,6 +98,7 @@ function DevolucionCard({ devolucion, borderColor, onEdit, onDelete, onTogglePro
             fontSize={{ base: 'xl', md: '2xl' }} 
             fontWeight="bold"
             color="accent.900"
+            textTransform="capitalize"
           >
             {devolucion.nombreCliente}
           </Text>
