@@ -16,6 +16,11 @@ import {
   CircularProgress,
   CircularProgressLabel,
   Spinner,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
 } from '@chakra-ui/react';
 import { ArrowBackIcon, AddIcon, DeleteIcon } from '@chakra-ui/icons';
 import ProductoModal from './ProductoModal';
@@ -24,13 +29,13 @@ import { coberturasService } from '../../services/coberturasService';
 function ProductosCobertura({ cliente, onBack }) {
   const [clienteData, setClienteData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [tabIndex, setTabIndex] = useState(0); // Mantener el tab activo
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
-  // Colores para los bordes (igual que la imagen)
+  // Colores para los bordes
   const borderColors = ['#ff9800', '#9c27b0', '#f44336', '#ffeb3b', '#e91e63', '#00bcd4'];
 
-  // Cargar productos del cliente al montar
   useEffect(() => {
     loadCliente();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -41,8 +46,7 @@ function ProductosCobertura({ cliente, onBack }) {
     try {
       const data = await coberturasService.getCliente(cliente._id);
       setClienteData(data);
-    } catch (error) {
-      console.error(error)
+    } catch {
       toast({
         title: 'Error al cargar productos',
         description: 'No se pudieron cargar los productos del cliente',
@@ -55,19 +59,31 @@ function ProductosCobertura({ cliente, onBack }) {
     }
   };
 
+  const getTipoActual = () => {
+    return tabIndex === 0 ? 'danone' : 'mastellone';
+  };
+
   const handleAddProducto = async (codigo) => {
     try {
-      await coberturasService.addProducto(cliente._id, codigo);
+      const tipo = getTipoActual();
+      
+      if (tipo === 'danone') {
+        await coberturasService.addProductoDanone(cliente._id, codigo);
+      } else {
+        await coberturasService.addProductoMastellone(cliente._id, codigo);
+      }
+      
       toast({
         title: 'Producto agregado',
         status: 'success',
-        duration: 2000,
+        duration: 1500,
         isClosable: true,
       });
-      loadCliente();
-      onClose();
-    } catch (error) {
-      console.error(error)
+      
+      // Recargar datos MANTENIENDO el tab activo
+      await loadCliente();
+      
+    } catch {
       toast({
         title: 'Error al agregar producto',
         description: 'No se pudo agregar el producto',
@@ -80,9 +96,7 @@ function ProductosCobertura({ cliente, onBack }) {
 
   const handleToggleProducto = async (producto) => {
     try {
-      // Verificar que el producto tenga _id
       if (!producto._id) {
-        console.error('Producto sin _id:', producto);
         toast({
           title: 'Error',
           description: 'El producto no tiene un ID válido',
@@ -93,14 +107,26 @@ function ProductosCobertura({ cliente, onBack }) {
         return;
       }
 
-      await coberturasService.updateProducto(
-        cliente._id, 
-        producto._id, 
-        !producto.completado
-      );
-      loadCliente();
-    } catch (error) {
-      console.error('Error al actualizar producto:', error);
+      const tipo = getTipoActual();
+      
+      if (tipo === 'danone') {
+        await coberturasService.updateProductoDanone(
+          cliente._id,
+          producto._id,
+          !producto.completado
+        );
+      } else {
+        await coberturasService.updateProductoMastellone(
+          cliente._id,
+          producto._id,
+          !producto.completado
+        );
+      }
+      
+      // Recargar datos MANTENIENDO el tab activo
+      await loadCliente();
+      
+    } catch {
       toast({
         title: 'Error al actualizar producto',
         description: 'No se pudo actualizar el estado del producto',
@@ -116,16 +142,25 @@ function ProductosCobertura({ cliente, onBack }) {
     
     if (window.confirm('¿Eliminar este producto?')) {
       try {
-        await coberturasService.deleteProducto(cliente._id, productoId);
+        const tipo = getTipoActual();
+        
+        if (tipo === 'danone') {
+          await coberturasService.deleteProductoDanone(cliente._id, productoId);
+        } else {
+          await coberturasService.deleteProductoMastellone(cliente._id, productoId);
+        }
+        
         toast({
           title: 'Producto eliminado',
           status: 'success',
           duration: 2000,
           isClosable: true,
         });
-        loadCliente();
-      } catch (error) {
-        console.error(error)
+        
+        // Recargar datos MANTENIENDO el tab activo
+        await loadCliente();
+        
+      } catch {
         toast({
           title: 'Error al eliminar',
           description: 'No se pudo eliminar el producto',
@@ -137,6 +172,10 @@ function ProductosCobertura({ cliente, onBack }) {
     }
   };
 
+  const handleTabChange = (index) => {
+    setTabIndex(index);
+  };
+
   if (isLoading || !clienteData) {
     return (
       <Box minH="100vh" bg="white" display="flex" alignItems="center" justifyContent="center">
@@ -145,18 +184,9 @@ function ProductosCobertura({ cliente, onBack }) {
     );
   }
 
-  const productos = clienteData.productos || [];
-
-  // Calcular estadísticas
-  const productosPendientes = productos.filter((p) => !p.completado);
-  const productosCompletados = productos.filter((p) => p.completado);
-  const totalProductos = productos.length;
-  const porcentajeCompletado = totalProductos > 0 
-    ? Math.round((productosCompletados.length / totalProductos) * 100) 
-    : 0;
-
-  // Ordenar: pendientes arriba, completados abajo
-  const productosOrdenados = [...productosPendientes, ...productosCompletados];
+  // Obtener productos según el tab actual
+  const productosDanone = clienteData.productosDanone || [];
+  const productosMastellone = clienteData.productosMastellone || [];
 
   return (
     <Box minH="100vh" bg="white" pb={8}>
@@ -187,179 +217,51 @@ function ProductosCobertura({ cliente, onBack }) {
       <Container maxW="container.lg" px={4} py={6}>
         <VStack spacing={6} align="stretch">
           
-          {/* Botón Agregar Producto */}
-          <Button
-            leftIcon={<AddIcon />}
+          {/* Tabs Danone / Mastellone - CONTROLADO */}
+          <Tabs 
+            index={tabIndex}
+            onChange={handleTabChange} 
+            variant="soft-rounded" 
             colorScheme="secondary"
-            onClick={onOpen}
-            size={{ base: 'md', md: 'lg' }}
-            w="100%"
+            size={{ base: 'sm', md: 'md' }}
           >
-            Agregar Producto
-          </Button>
+            <TabList>
+              <Tab fontWeight="bold" _selected={{ bg: 'secondary.500', color: 'white' }}>
+                🥛 Danone
+              </Tab>
+              <Tab fontWeight="bold" _selected={{ bg: 'secondary.500', color: 'white' }}>
+                🧀 Mastellone
+              </Tab>
+            </TabList>
 
-          {/* Estadísticas con Porcentaje */}
-          <Box 
-            bg="white" 
-            border="2px solid" 
-            borderColor="gray.200" 
-            borderRadius="lg" 
-            p={4}
-            shadow="sm"
-          >
-            <VStack spacing={4}>
-              {/* Indicador circular de porcentaje */}
-              <Flex justify="center" align="center" w="100%">
-                <CircularProgress 
-                  value={porcentajeCompletado} 
-                  size="120px" 
-                  thickness="12px"
-                  color={porcentajeCompletado === 100 ? 'green.400' : 'secondary.500'}
-                >
-                  <CircularProgressLabel fontSize="2xl" fontWeight="bold">
-                    {porcentajeCompletado}%
-                  </CircularProgressLabel>
-                </CircularProgress>
-              </Flex>
-
-              {/* Barra de progreso */}
-              <Box w="100%">
-                <Text fontSize="sm" fontWeight="semibold" mb={2} textAlign="center">
-                  Porcentaje Realizado
-                </Text>
-                <Progress 
-                  value={porcentajeCompletado} 
-                  size="sm" 
-                  colorScheme={porcentajeCompletado === 100 ? 'green' : 'secondary'}
-                  borderRadius="full"
-                  hasStripe
-                  isAnimated
-                />
-              </Box>
-
-              {/* Contadores */}
-              <HStack justify="space-around" w="100%" pt={2}>
-                <VStack spacing={0}>
-                  <Text fontSize="xs" color="gray.600">Pendientes</Text>
-                  <Text fontSize="2xl" fontWeight="bold" color="orange.500">
-                    {productosPendientes.length}
-                  </Text>
+            <TabPanels>
+              {/* Panel Danone */}
+              <TabPanel px={0}>
+                <VStack spacing={6} align="stretch">
+                  <ProductList
+                    productos={productosDanone}
+                    borderColors={borderColors}
+                    onToggle={handleToggleProducto}
+                    onDelete={handleDeleteProducto}
+                    onAddProducto={onOpen}
+                  />
                 </VStack>
-                
-                <Box h="40px" w="1px" bg="gray.300" />
-                
-                <VStack spacing={0}>
-                  <Text fontSize="xs" color="gray.600">Completados</Text>
-                  <Text fontSize="2xl" fontWeight="bold" color="green.500">
-                    {productosCompletados.length}
-                  </Text>
+              </TabPanel>
+
+              {/* Panel Mastellone */}
+              <TabPanel px={0}>
+                <VStack spacing={6} align="stretch">
+                  <ProductList
+                    productos={productosMastellone}
+                    borderColors={borderColors}
+                    onToggle={handleToggleProducto}
+                    onDelete={handleDeleteProducto}
+                    onAddProducto={onOpen}
+                  />
                 </VStack>
-                
-                <Box h="40px" w="1px" bg="gray.300" />
-                
-                <VStack spacing={0}>
-                  <Text fontSize="xs" color="gray.600">Total</Text>
-                  <Text fontSize="2xl" fontWeight="bold" color="gray.700">
-                    {totalProductos}
-                  </Text>
-                </VStack>
-              </HStack>
-            </VStack>
-          </Box>
-
-          {/* Lista de Productos - Estilo Checklist */}
-          {productosOrdenados.length === 0 ? (
-            <Text textAlign="center" color="gray.500" py={8}>
-              No hay productos. ¡Agrega uno!
-            </Text>
-          ) : (
-            <VStack spacing={3} align="stretch">
-              {productosOrdenados.map((producto, index) => {
-                const borderColor = borderColors[index % borderColors.length];
-                
-                // Usar _id como key
-                const productoKey = producto._id || `producto-${index}`;
-                
-                return (
-                  <Flex
-                    key={productoKey}
-                    align="center"
-                    gap={3}
-                    position="relative"
-                  >
-                    {/* Borde de color (como en la imagen) */}
-                    <Box
-                      w="12px"
-                      h="100%"
-                      position="absolute"
-                      left="0"
-                      top="0"
-                      bg={borderColor}
-                      borderRadius="md 0 0 md"
-                    />
-
-                    {/* Card del producto */}
-                    <Box
-                      flex={1}
-                      bg="white"
-                      border="2px solid"
-                      borderColor="gray.300"
-                      borderRadius="md"
-                      pl={6}
-                      pr={4}
-                      py={3}
-                      shadow="sm"
-                      transition="all 0.2s"
-                      opacity={producto.completado ? 0.6 : 1}
-                      _hover={{
-                        shadow: 'md',
-                        borderColor: 'gray.400',
-                      }}
-                    >
-                      <Flex justify="space-between" align="center">
-                        <Text
-                          fontSize={{ base: 'lg', md: 'xl' }}
-                          fontWeight="bold"
-                          color="accent.900"
-                          textDecoration={producto.completado ? 'line-through' : 'none'}
-                        >
-                          {producto.codigo}
-                        </Text>
-
-                        <HStack spacing={2}>
-                          <IconButton
-                            icon={<DeleteIcon />}
-                            size="sm"
-                            colorScheme="red"
-                            variant="ghost"
-                            onClick={(e) => handleDeleteProducto(producto._id, e)}
-                            aria-label="Eliminar producto"
-                          />
-                        </HStack>
-                      </Flex>
-                    </Box>
-
-                    {/* Checkbox (como en la imagen) */}
-                    <Checkbox
-                      size="lg"
-                      colorScheme="green"
-                      isChecked={producto.completado}
-                      onChange={() => handleToggleProducto(producto)}
-                      borderColor="gray.400"
-                      sx={{
-                        '& .chakra-checkbox__control': {
-                          width: '28px',
-                          height: '28px',
-                          borderWidth: '2px',
-                          borderRadius: 'full',
-                        },
-                      }}
-                    />
-                  </Flex>
-                );
-              })}
-            </VStack>
-          )}
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         </VStack>
       </Container>
 
@@ -370,6 +272,196 @@ function ProductosCobertura({ cliente, onBack }) {
         onSave={handleAddProducto}
       />
     </Box>
+  );
+}
+
+// Componente de lista reutilizable
+function ProductList({ 
+  productos,
+  borderColors,
+  onToggle,
+  onDelete,
+  onAddProducto
+}) {
+  // Calcular estadísticas
+  const productosPendientes = productos.filter((p) => !p.completado);
+  const productosCompletados = productos.filter((p) => p.completado);
+  const totalProductos = productos.length;
+  const porcentajeCompletado = totalProductos > 0 
+    ? Math.round((productosCompletados.length / totalProductos) * 100) 
+    : 0;
+
+  // Ordenar: pendientes arriba, completados abajo
+  const productosOrdenados = [...productosPendientes, ...productosCompletados];
+
+  return (
+    <>
+      {/* Botón Agregar Producto */}
+      <Button
+        leftIcon={<AddIcon />}
+        colorScheme="secondary"
+        onClick={onAddProducto}
+        size={{ base: 'md', md: 'lg' }}
+        w="100%"
+      >
+        Agregar Producto
+      </Button>
+
+      {/* Estadísticas */}
+      <Box 
+        bg="white" 
+        border="2px solid" 
+        borderColor="gray.200" 
+        borderRadius="lg" 
+        p={4}
+        shadow="sm"
+      >
+        <VStack spacing={4}>
+          <Flex justify="center" align="center" w="100%">
+            <CircularProgress 
+              value={porcentajeCompletado} 
+              size="120px" 
+              thickness="12px"
+              color={porcentajeCompletado === 100 ? 'green.400' : 'secondary.500'}
+            >
+              <CircularProgressLabel fontSize="2xl" fontWeight="bold">
+                {porcentajeCompletado}%
+              </CircularProgressLabel>
+            </CircularProgress>
+          </Flex>
+
+          <Box w="100%">
+            <Text fontSize="sm" fontWeight="semibold" mb={2} textAlign="center">
+              Porcentaje Realizado
+            </Text>
+            <Progress 
+              value={porcentajeCompletado} 
+              size="sm" 
+              colorScheme={porcentajeCompletado === 100 ? 'green' : 'secondary'}
+              borderRadius="full"
+              hasStripe
+              isAnimated
+            />
+          </Box>
+
+          <HStack justify="space-around" w="100%" pt={2}>
+            <VStack spacing={0}>
+              <Text fontSize="xs" color="gray.600">Pendientes</Text>
+              <Text fontSize="2xl" fontWeight="bold" color="orange.500">
+                {productosPendientes.length}
+              </Text>
+            </VStack>
+            
+            <Box h="40px" w="1px" bg="gray.300" />
+            
+            <VStack spacing={0}>
+              <Text fontSize="xs" color="gray.600">Completados</Text>
+              <Text fontSize="2xl" fontWeight="bold" color="green.500">
+                {productosCompletados.length}
+              </Text>
+            </VStack>
+            
+            <Box h="40px" w="1px" bg="gray.300" />
+            
+            <VStack spacing={0}>
+              <Text fontSize="xs" color="gray.600">Total</Text>
+              <Text fontSize="2xl" fontWeight="bold" color="gray.700">
+                {totalProductos}
+              </Text>
+            </VStack>
+          </HStack>
+        </VStack>
+      </Box>
+
+      {/* Lista de Productos */}
+      {productosOrdenados.length === 0 ? (
+        <Text textAlign="center" color="gray.500" py={8}>
+          No hay productos. ¡Agrega uno!
+        </Text>
+      ) : (
+        <VStack spacing={3} align="stretch">
+          {productosOrdenados.map((producto, index) => {
+            const borderColor = borderColors[index % borderColors.length];
+            const productoKey = producto._id || `producto-${index}`;
+            
+            return (
+              <Flex
+                key={productoKey}
+                align="center"
+                gap={3}
+                position="relative"
+              >
+                <Box
+                  w="12px"
+                  h="100%"
+                  position="absolute"
+                  left="0"
+                  top="0"
+                  bg={borderColor}
+                  borderRadius="md 0 0 md"
+                />
+
+                <Box
+                  flex={1}
+                  bg="white"
+                  border="2px solid"
+                  borderColor="gray.300"
+                  borderRadius="md"
+                  pl={6}
+                  pr={4}
+                  py={3}
+                  shadow="sm"
+                  transition="all 0.2s"
+                  opacity={producto.completado ? 0.6 : 1}
+                  _hover={{
+                    shadow: 'md',
+                    borderColor: 'gray.400',
+                  }}
+                >
+                  <Flex justify="space-between" align="center">
+                    <Text
+                      fontSize={{ base: 'lg', md: 'xl' }}
+                      fontWeight="bold"
+                      color="accent.900"
+                      textDecoration={producto.completado ? 'line-through' : 'none'}
+                    >
+                      {producto.codigo}
+                    </Text>
+
+                    <HStack spacing={2}>
+                      <IconButton
+                        icon={<DeleteIcon />}
+                        size="sm"
+                        colorScheme="red"
+                        variant="ghost"
+                        onClick={(e) => onDelete(producto._id, e)}
+                        aria-label="Eliminar producto"
+                      />
+                    </HStack>
+                  </Flex>
+                </Box>
+
+                <Checkbox
+                  size="lg"
+                  colorScheme="green"
+                  isChecked={producto.completado}
+                  onChange={() => onToggle(producto)}
+                  borderColor="gray.400"
+                  sx={{
+                    '& .chakra-checkbox__control': {
+                      width: '28px',
+                      height: '28px',
+                      borderWidth: '2px',
+                      borderRadius: 'full',
+                    },
+                  }}
+                />
+              </Flex>
+            );
+          })}
+        </VStack>
+      )}
+    </>
   );
 }
 

@@ -68,4 +68,21 @@ export const devolucionesService = {
       throw error;
     }
   },
+
+  // NUEVO: Toggle producto completado
+  toggleProducto: async (devolucionId, productoId) => {
+    try {
+      const response = await fetch(`${API_URL}/devoluciones/${devolucionId}/productos/${productoId}/toggle`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Error al actualizar producto');
+      return await response.json();
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  },
 };

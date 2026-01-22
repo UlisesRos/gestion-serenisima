@@ -49,8 +49,7 @@ function Devoluciones({ onBack }) {
       
       const data = await devolucionesService.getAllDevoluciones(filters);
       setDevoluciones(data);
-    } catch (error) {
-      console.error(error)
+    } catch {
       toast({
         title: 'Error al cargar devoluciones',
         description: 'No se pudieron cargar las devoluciones del servidor',
@@ -89,8 +88,7 @@ function Devoluciones({ onBack }) {
       }
       loadDevoluciones();
       onClose();
-    } catch (error) {
-      console.error(error)
+    } catch {
       toast({
         title: 'Error al guardar',
         description: 'No se pudo guardar la devolución',
@@ -117,8 +115,7 @@ function Devoluciones({ onBack }) {
           isClosable: true,
         });
         loadDevoluciones();
-      } catch (error) {
-        console.error(error)
+      } catch {
         toast({
           title: 'Error al eliminar',
           description: 'No se pudo eliminar la devolución',
@@ -127,6 +124,22 @@ function Devoluciones({ onBack }) {
           isClosable: true,
         });
       }
+    }
+  };
+
+  const handleToggleProducto = async (devolucionId, productoId) => {
+    try {
+      await devolucionesService.toggleProducto(devolucionId, productoId);
+      // Recargar devoluciones para actualizar el estado
+      loadDevoluciones();
+    } catch {
+      toast({
+        title: 'Error al actualizar producto',
+        description: 'No se pudo actualizar el estado del producto',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
@@ -290,6 +303,7 @@ function Devoluciones({ onBack }) {
                             borderColor={borderColor}
                             onEdit={() => handleEditDevolucion(devolucion)}
                             onDelete={() => handleDeleteDevolucion(devolucion._id)}
+                            onToggleProducto={handleToggleProducto}
                           />
                         );
                       })}

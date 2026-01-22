@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -12,11 +12,21 @@ import {
   FormLabel,
   Input,
   Text,
+  HStack,
 } from '@chakra-ui/react';
 
 function ProductoModal({ isOpen, onClose, onSave }) {
   const [codigo, setCodigo] = useState('');
   const [error, setError] = useState('');
+
+  // Resetear cuando se abre el modal
+  useEffect(() => {
+    if (isOpen) {
+      // eslint-disable-next-line
+      setCodigo('');
+      setError('');
+    }
+  }, [isOpen]);
 
   const handleChange = (e) => {
     const value = e.target.value;
@@ -27,21 +37,37 @@ function ProductoModal({ isOpen, onClose, onSave }) {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmitAndContinue = async () => {
     if (codigo.length !== 6) {
       setError('El código debe tener exactamente 6 dígitos');
       return;
     }
 
-    onSave(codigo);
+    await onSave(codigo);
+    
+    // Limpiar el campo pero NO cerrar el modal
     setCodigo('');
     setError('');
+  };
+
+  const handleSubmitAndClose = async () => {
+    if (codigo.length !== 6) {
+      setError('El código debe tener exactamente 6 dígitos');
+      return;
+    }
+
+    await onSave(codigo);
+    
+    // Limpiar y cerrar
+    setCodigo('');
+    setError('');
+    onClose();
   };
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleSubmit();
+      handleSubmitAndContinue(); // Enter = agregar y seguir
     }
   };
 
@@ -52,7 +78,13 @@ function ProductoModal({ isOpen, onClose, onSave }) {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} isCentered size={{ base: 'sm', md: 'md' }}>
+    <Modal 
+      isOpen={isOpen} 
+      onClose={handleClose} 
+      isCentered 
+      size={{ base: 'sm', md: 'md' }}
+      closeOnOverlayClick={false} // Evitar cerrar al hacer click fuera
+    >
       <ModalOverlay />
       <ModalContent mx={4}>
         <ModalHeader>Agregar Producto</ModalHeader>
@@ -85,16 +117,29 @@ function ProductoModal({ isOpen, onClose, onSave }) {
         </ModalBody>
 
         <ModalFooter>
-          <Button variant="ghost" mr={3} onClick={handleClose}>
-            Cancelar
-          </Button>
-          <Button 
-            colorScheme="secondary" 
-            onClick={handleSubmit}
-            isDisabled={codigo.length !== 6}
-          >
-            Agregar
-          </Button>
+          <HStack spacing={2} w="100%" justify="space-between">
+            <Button variant="ghost" onClick={handleClose}>
+              Cancelar
+            </Button>
+            
+            <HStack spacing={2}>
+              <Button 
+                colorScheme="blue" 
+                onClick={handleSubmitAndContinue}
+                isDisabled={codigo.length !== 6}
+              >
+                Agregar otro
+              </Button>
+              
+              <Button 
+                colorScheme="secondary" 
+                onClick={handleSubmitAndClose}
+                isDisabled={codigo.length !== 6}
+              >
+                Agregar y cerrar
+              </Button>
+            </HStack>
+          </HStack>
         </ModalFooter>
       </ModalContent>
     </Modal>

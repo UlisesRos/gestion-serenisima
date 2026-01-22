@@ -4,7 +4,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 export const coberturasService = {
   // ===== CLIENTES =====
   
-  // Obtener todos los clientes
   getAllClientes: async () => {
     try {
       const response = await fetch(`${API_URL}/coberturas/clientes`);
@@ -16,7 +15,6 @@ export const coberturasService = {
     }
   },
 
-  // Obtener un cliente por ID
   getCliente: async (id) => {
     try {
       const response = await fetch(`${API_URL}/coberturas/clientes/${id}`);
@@ -28,7 +26,6 @@ export const coberturasService = {
     }
   },
 
-  // Crear nuevo cliente
   createCliente: async (clienteData) => {
     try {
       const response = await fetch(`${API_URL}/coberturas/clientes`, {
@@ -46,7 +43,6 @@ export const coberturasService = {
     }
   },
 
-  // Actualizar cliente
   updateCliente: async (id, clienteData) => {
     try {
       const response = await fetch(`${API_URL}/coberturas/clientes/${id}`, {
@@ -64,7 +60,6 @@ export const coberturasService = {
     }
   },
 
-  // Eliminar cliente
   deleteCliente: async (id) => {
     try {
       const response = await fetch(`${API_URL}/coberturas/clientes/${id}`, {
@@ -78,12 +73,11 @@ export const coberturasService = {
     }
   },
 
-  // ===== PRODUCTOS =====
+  // ===== PRODUCTOS DANONE =====
 
-  // Agregar producto a un cliente
-  addProducto: async (clienteId, codigo) => {
+  addProductoDanone: async (clienteId, codigo) => {
     try {
-      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos`, {
+      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/danone`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,10 +92,9 @@ export const coberturasService = {
     }
   },
 
-  // Actualizar estado de un producto
-  updateProducto: async (clienteId, productoId, completado) => {
+  updateProductoDanone: async (clienteId, productoId, completado) => {
     try {
-      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/${productoId}`, {
+      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/danone/${productoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -116,10 +109,58 @@ export const coberturasService = {
     }
   },
 
-  // Eliminar producto de un cliente
-  deleteProducto: async (clienteId, productoId) => {
+  deleteProductoDanone: async (clienteId, productoId) => {
     try {
-      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/${productoId}`, {
+      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/danone/${productoId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Error al eliminar producto');
+      return await response.json();
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  },
+
+  // ===== PRODUCTOS MASTELLONE =====
+
+  addProductoMastellone: async (clienteId, codigo) => {
+    try {
+      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/mastellone`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ codigo }),
+      });
+      if (!response.ok) throw new Error('Error al agregar producto');
+      return await response.json();
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  },
+
+  updateProductoMastellone: async (clienteId, productoId, completado) => {
+    try {
+      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/mastellone/${productoId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ completado }),
+      });
+      if (!response.ok) throw new Error('Error al actualizar producto');
+      return await response.json();
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  },
+
+  deleteProductoMastellone: async (clienteId, productoId) => {
+    try {
+      const response = await fetch(`${API_URL}/coberturas/clientes/${clienteId}/productos/mastellone/${productoId}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Error al eliminar producto');
