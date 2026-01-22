@@ -32,12 +32,10 @@ function Devoluciones({ onBack }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
-  // Colores para los bordes
   const borderColors = ['#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0'];
 
   useEffect(() => {
     loadDevoluciones();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchName, searchDate]);
 
   const loadDevoluciones = async () => {
@@ -49,7 +47,7 @@ function Devoluciones({ onBack }) {
       
       const data = await devolucionesService.getAllDevoluciones(filters);
       setDevoluciones(data);
-    } catch {
+    } catch (error) {
       toast({
         title: 'Error al cargar devoluciones',
         description: 'No se pudieron cargar las devoluciones del servidor',
@@ -88,7 +86,7 @@ function Devoluciones({ onBack }) {
       }
       loadDevoluciones();
       onClose();
-    } catch {
+    } catch (error) {
       toast({
         title: 'Error al guardar',
         description: 'No se pudo guardar la devolución',
@@ -115,7 +113,7 @@ function Devoluciones({ onBack }) {
           isClosable: true,
         });
         loadDevoluciones();
-      } catch {
+      } catch (error) {
         toast({
           title: 'Error al eliminar',
           description: 'No se pudo eliminar la devolución',
@@ -128,7 +126,7 @@ function Devoluciones({ onBack }) {
   };
 
   const handleToggleProducto = async (devolucionId, productoId) => {
-    // OPTIMIZACIÓN: Actualizar el estado LOCAL primero (instantáneo)
+    // Actualizar estado local primero (instantáneo)
     setDevoluciones(prevDevoluciones => 
       prevDevoluciones.map(dev => {
         if (dev._id === devolucionId) {
@@ -145,15 +143,53 @@ function Devoluciones({ onBack }) {
       })
     );
 
-    // Luego sincronizar con el servidor en segundo plano
+    // Sincronizar con servidor en segundo plano
     try {
       await devolucionesService.toggleProducto(devolucionId, productoId);
-    } catch {
-      // Si falla, revertir el cambio y mostrar error
-      loadDevoluciones(); // Recargar del servidor
+    } catch (error) {
+      loadDevoluciones();
       toast({
         title: 'Error al actualizar producto',
         description: 'No se pudo actualizar el estado del producto',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleUpdateProducto = async (devolucionId, productoId, data) => {
+    // Actualizar estado local primero (instantáneo)
+    setDevoluciones(prevDevoluciones => 
+      prevDevoluciones.map(dev => {
+        if (dev._id === devolucionId) {
+          return {
+            ...dev,
+            productos: dev.productos.map(prod => 
+              prod._id === productoId 
+                ? { ...prod, ...data }
+                : prod
+            )
+          };
+        }
+        return dev;
+      })
+    );
+
+    // Sincronizar con servidor en segundo plano
+    try {
+      await devolucionesService.updateProducto(devolucionId, productoId, data);
+      toast({
+        title: 'Producto actualizado',
+        status: 'success',
+        duration: 1500,
+        isClosable: true,
+      });
+    } catch (error) {
+      loadDevoluciones();
+      toast({
+        title: 'Error al actualizar',
+        description: 'No se pudo actualizar el producto',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -322,6 +358,7 @@ function Devoluciones({ onBack }) {
                             onEdit={() => handleEditDevolucion(devolucion)}
                             onDelete={() => handleDeleteDevolucion(devolucion._id)}
                             onToggleProducto={handleToggleProducto}
+                            onUpdateProducto={handleUpdateProducto}
                           />
                         );
                       })}
