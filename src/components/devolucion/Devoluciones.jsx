@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -34,11 +34,7 @@ function Devoluciones({ onBack }) {
 
   const borderColors = ['#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0'];
 
-  useEffect(() => {
-    loadDevoluciones();
-  }, [searchName, searchDate]);
-
-  const loadDevoluciones = async () => {
+  const loadDevoluciones = useCallback(async () => {
     setIsLoading(true);
     try {
       const filters = {};
@@ -47,7 +43,7 @@ function Devoluciones({ onBack }) {
       
       const data = await devolucionesService.getAllDevoluciones(filters);
       setDevoluciones(data);
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error al cargar devoluciones',
         description: 'No se pudieron cargar las devoluciones del servidor',
@@ -58,7 +54,11 @@ function Devoluciones({ onBack }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [searchName, searchDate, toast]);
+
+  useEffect(() => {
+    loadDevoluciones();
+  }, [loadDevoluciones]);
 
   const handleAddDevolucion = () => {
     setSelectedDevolucion(null);
@@ -86,7 +86,7 @@ function Devoluciones({ onBack }) {
       }
       loadDevoluciones();
       onClose();
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error al guardar',
         description: 'No se pudo guardar la devolución',
@@ -113,7 +113,7 @@ function Devoluciones({ onBack }) {
           isClosable: true,
         });
         loadDevoluciones();
-      } catch (error) {
+      } catch {
         toast({
           title: 'Error al eliminar',
           description: 'No se pudo eliminar la devolución',
@@ -125,8 +125,7 @@ function Devoluciones({ onBack }) {
     }
   };
 
-  const handleToggleProducto = async (devolucionId, productoId) => {
-    // Actualizar estado local primero (instantáneo)
+  const handleToggleControlado = async (devolucionId, productoId) => {
     setDevoluciones(prevDevoluciones => 
       prevDevoluciones.map(dev => {
         if (dev._id === devolucionId) {
@@ -134,7 +133,7 @@ function Devoluciones({ onBack }) {
             ...dev,
             productos: dev.productos.map(prod => 
               prod._id === productoId 
-                ? { ...prod, completado: !prod.completado }
+                ? { ...prod, controlado: !prod.controlado }
                 : prod
             )
           };
@@ -143,14 +142,44 @@ function Devoluciones({ onBack }) {
       })
     );
 
-    // Sincronizar con servidor en segundo plano
     try {
-      await devolucionesService.toggleProducto(devolucionId, productoId);
-    } catch (error) {
+      await devolucionesService.toggleControlado(devolucionId, productoId);
+    } catch {
       loadDevoluciones();
       toast({
-        title: 'Error al actualizar producto',
-        description: 'No se pudo actualizar el estado del producto',
+        title: 'Error al actualizar',
+        description: 'No se pudo actualizar el estado',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleToggleMaquina = async (devolucionId, productoId) => {
+    setDevoluciones(prevDevoluciones => 
+      prevDevoluciones.map(dev => {
+        if (dev._id === devolucionId) {
+          return {
+            ...dev,
+            productos: dev.productos.map(prod => 
+              prod._id === productoId 
+                ? { ...prod, pasadoMaquina: !prod.pasadoMaquina }
+                : prod
+            )
+          };
+        }
+        return dev;
+      })
+    );
+
+    try {
+      await devolucionesService.toggleMaquina(devolucionId, productoId);
+    } catch {
+      loadDevoluciones();
+      toast({
+        title: 'Error al actualizar',
+        description: 'No se pudo actualizar el estado',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -159,7 +188,6 @@ function Devoluciones({ onBack }) {
   };
 
   const handleUpdateProducto = async (devolucionId, productoId, data) => {
-    // Actualizar estado local primero (instantáneo)
     setDevoluciones(prevDevoluciones => 
       prevDevoluciones.map(dev => {
         if (dev._id === devolucionId) {
@@ -176,7 +204,6 @@ function Devoluciones({ onBack }) {
       })
     );
 
-    // Sincronizar con servidor en segundo plano
     try {
       await devolucionesService.updateProducto(devolucionId, productoId, data);
       toast({
@@ -185,7 +212,7 @@ function Devoluciones({ onBack }) {
         duration: 1500,
         isClosable: true,
       });
-    } catch (error) {
+    } catch {
       loadDevoluciones();
       toast({
         title: 'Error al actualizar',
@@ -197,37 +224,34 @@ function Devoluciones({ onBack }) {
     }
   };
 
-  // Agrupar devoluciones por fecha
-  const devolucionesPorFecha = devoluciones.reduce((acc, dev) => {
-    const fecha = new Date(dev.fecha).toLocaleDateString('es-AR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+  // Función para formatear fecha SIN conversión de zona horaria
+  const formatearFecha = (fechaISO) => {
+    const fecha = new Date(fechaISO);
+    // Usar getUTCDate, getUTCMonth, getUTCFullYear para mantener la fecha UTC
+    const dia = fecha.getUTCDate();
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const mes = meses[fecha.getUTCMonth()];
+    const año = fecha.getUTCFullYear();
     
-    if (!acc[fecha]) {
-      acc[fecha] = [];
+    return `${dia} de ${mes} de ${año}`;
+  };
+
+  // Agrupar devoluciones por fecha (usando UTC)
+  const devolucionesPorFecha = devoluciones.reduce((acc, dev) => {
+    const fechaFormateada = formatearFecha(dev.fecha);
+    
+    if (!acc[fechaFormateada]) {
+      acc[fechaFormateada] = [];
     }
-    acc[fecha].push(dev);
+    acc[fechaFormateada].push(dev);
     return acc;
   }, {});
 
   // Ordenar fechas de más reciente a más antigua
   const fechasOrdenadas = Object.keys(devolucionesPorFecha).sort((a, b) => {
-    const fechaA = devoluciones.find(d => 
-      new Date(d.fecha).toLocaleDateString('es-AR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      }) === a
-    )?.fecha;
-    const fechaB = devoluciones.find(d => 
-      new Date(d.fecha).toLocaleDateString('es-AR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      }) === b
-    )?.fecha;
+    const fechaA = devoluciones.find(d => formatearFecha(d.fecha) === a)?.fecha;
+    const fechaB = devoluciones.find(d => formatearFecha(d.fecha) === b)?.fecha;
     return new Date(fechaB) - new Date(fechaA);
   });
 
@@ -357,7 +381,8 @@ function Devoluciones({ onBack }) {
                             borderColor={borderColor}
                             onEdit={() => handleEditDevolucion(devolucion)}
                             onDelete={() => handleDeleteDevolucion(devolucion._id)}
-                            onToggleProducto={handleToggleProducto}
+                            onToggleControlado={handleToggleControlado}
+                            onToggleMaquina={handleToggleMaquina}
                             onUpdateProducto={handleUpdateProducto}
                           />
                         );

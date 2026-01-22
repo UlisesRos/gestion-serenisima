@@ -10,18 +10,23 @@ import {
   Checkbox,
   Input,
   useToast,
+  Icon,
 } from '@chakra-ui/react';
-import { EditIcon, DeleteIcon, CheckIcon, CloseIcon } from '@chakra-ui/icons';
+import { EditIcon, DeleteIcon, CheckIcon, CloseIcon, CheckCircleIcon } from '@chakra-ui/icons';
 
-function DevolucionCard({ devolucion, borderColor, onEdit, onDelete, onToggleProducto, onUpdateProducto }) {
+function DevolucionCard({ devolucion, borderColor, onEdit, onDelete, onToggleControlado, onToggleMaquina, onUpdateProducto }) {
   const [editingProductoId, setEditingProductoId] = useState(null);
   const [tempCodigo, setTempCodigo] = useState('');
   const [tempCantidad, setTempCantidad] = useState('');
   const toast = useToast();
 
   const totalProductos = devolucion.productos.reduce((sum, p) => sum + Number(p.cantidad), 0);
-  const productosCompletados = devolucion.productos.filter(p => p.completado).length;
-  const todoCompletado = devolucion.productos.length > 0 && productosCompletados === devolucion.productos.length;
+  const productosControlados = devolucion.productos.filter(p => p.controlado).length;
+  const productosPasadosMaquina = devolucion.productos.filter(p => p.pasadoMaquina).length;
+  
+  // TODO completado = todos los productos tienen ambos checks
+  const todoCompletado = devolucion.productos.length > 0 && 
+    devolucion.productos.every(p => p.controlado && p.pasadoMaquina);
 
   const handleStartEdit = (producto) => {
     setEditingProductoId(producto._id);
@@ -92,25 +97,37 @@ function DevolucionCard({ devolucion, borderColor, onEdit, onDelete, onTogglePro
       }}
     >
       <Flex justify="space-between" align="start" mb={3}>
-        {/* Nombre del cliente */}
+        {/* Nombre del cliente con ícono de completado */}
         <VStack align="start" spacing={1}>
-          <Text 
-            fontSize={{ base: 'xl', md: '2xl' }} 
-            fontWeight="bold"
-            color="accent.900"
-            textTransform="capitalize"
-          >
-            {devolucion.nombreCliente}
-          </Text>
           <HStack spacing={2}>
+            <Text 
+              fontSize={{ base: 'xl', md: '2xl' }} 
+              fontWeight="bold"
+              color="accent.900"
+              textTransform='capitalize'
+            >
+              {devolucion.nombreCliente}
+            </Text>
+            {/* Ícono de completado total al lado del nombre */}
+            {todoCompletado && (
+              <Icon
+                as={CheckCircleIcon}
+                w={6}
+                h={6}
+                color="green.500"
+              />
+            )}
+          </HStack>
+          
+          <HStack spacing={2} flexWrap="wrap">
             <Badge colorScheme="gray" fontSize="xs">
               {totalProductos} {totalProductos === 1 ? 'unidad' : 'unidades'}
             </Badge>
-            <Badge 
-              colorScheme={todoCompletado ? 'green' : 'orange'} 
-              fontSize="xs"
-            >
-              {productosCompletados}/{devolucion.productos.length} pasados
+            <Badge colorScheme="green" fontSize="xs">
+              ✓ {productosControlados}/{devolucion.productos.length} controlados
+            </Badge>
+            <Badge colorScheme="blue" fontSize="xs">
+              ⚙ {productosPasadosMaquina}/{devolucion.productos.length} en máquina
             </Badge>
           </HStack>
         </VStack>
@@ -136,25 +153,27 @@ function DevolucionCard({ devolucion, borderColor, onEdit, onDelete, onTogglePro
         </HStack>
       </Flex>
 
-      {/* Lista de productos con checkbox */}
+      {/* Lista de productos con checkboxes */}
       <VStack align="stretch" spacing={2}>
         {devolucion.productos.map((producto, idx) => {
           const isEditing = editingProductoId === producto._id;
+          const ambosCompletados = producto.controlado && producto.pasadoMaquina;
 
           return (
             <Flex
               key={producto._id || idx}
               align="center"
-              gap={3}
+              gap={2}
               position="relative"
             >
-              {/* Checkbox */}
+              {/* CHECKBOX 1: Controlado (verde) - IZQUIERDA */}
               <Checkbox
                 size="lg"
                 colorScheme="green"
-                isChecked={producto.completado}
-                onChange={() => onToggleProducto(devolucion._id, producto._id)}
+                isChecked={producto.controlado}
+                onChange={() => onToggleControlado(devolucion._id, producto._id)}
                 borderColor="gray.400"
+                title="Controlado - Verificado que está"
                 sx={{
                   '& .chakra-checkbox__control': {
                     width: '24px',
@@ -173,7 +192,7 @@ function DevolucionCard({ devolucion, borderColor, onEdit, onDelete, onTogglePro
                 borderRadius="md"
                 borderLeft="4px solid"
                 borderLeftColor={borderColor}
-                opacity={producto.completado ? 0.6 : 1}
+                opacity={ambosCompletados ? 0.6 : 1}
                 transition="all 0.2s"
               >
                 <Flex justify="space-between" align="center" flexWrap="wrap" gap={2}>
@@ -258,6 +277,23 @@ function DevolucionCard({ devolucion, borderColor, onEdit, onDelete, onTogglePro
                   )}
                 </Flex>
               </Box>
+
+              {/* CHECKBOX 2: Pasado a Máquina (azul) - DERECHA */}
+              <Checkbox
+                size="lg"
+                colorScheme="blue"
+                isChecked={producto.pasadoMaquina}
+                onChange={() => onToggleMaquina(devolucion._id, producto._id)}
+                borderColor="gray.400"
+                title="Pasado a Máquina"
+                sx={{
+                  '& .chakra-checkbox__control': {
+                    width: '24px',
+                    height: '24px',
+                    borderWidth: '2px',
+                  },
+                }}
+              />
             </Flex>
           );
         })}

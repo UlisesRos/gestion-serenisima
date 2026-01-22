@@ -69,10 +69,27 @@ export const devolucionesService = {
     }
   },
 
-  // Toggle producto completado
-  toggleProducto: async (devolucionId, productoId) => {
+  // Toggle producto CONTROLADO (check verde)
+  toggleControlado: async (devolucionId, productoId) => {
     try {
-      const response = await fetch(`${API_URL}/devoluciones/${devolucionId}/productos/${productoId}/toggle`, {
+      const response = await fetch(`${API_URL}/devoluciones/${devolucionId}/productos/${productoId}/toggle-controlado`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Error al actualizar producto');
+      return await response.json();
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  },
+
+  // Toggle producto PASADO A MÁQUINA (check azul)
+  toggleMaquina: async (devolucionId, productoId) => {
+    try {
+      const response = await fetch(`${API_URL}/devoluciones/${devolucionId}/productos/${productoId}/toggle-maquina`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
