@@ -157,6 +157,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                     onKeyPress={(e) => handleKeyPress(e, cantidadRef)}
                     placeholder="Ej: 3480"
                     type="text"
+                    inputMode="numeric"
                   />
                 </FormControl>
 
@@ -169,6 +170,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                     onKeyPress={(e) => handleKeyPress(e, descripcionRef)}
                     placeholder="Ej: 2"
                     type="number"
+                    inputMode="numeric"
                     min="1"
                   />
                 </FormControl>
