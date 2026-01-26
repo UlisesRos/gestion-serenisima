@@ -17,9 +17,7 @@ import {
   Text,
   Box,
   Divider,
-  Flex,
-  InputGroup,
-  InputRightElement
+  Flex
 } from '@chakra-ui/react';
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
 
@@ -31,7 +29,6 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
     cantidad: '',
     descripcion: '',
   });
-  const [usarTecladoNumerico, setUsarTecladoNumerico] = useState(true);
 
   const nombreRef = useRef(null);
   const codigoRef = useRef(null);
@@ -50,8 +47,6 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
         setProductos([]);
         setCurrentProducto({ codigo: '', cantidad: '', descripcion: '' });
       }
-      // Resetear a teclado numérico cuando se abre el modal
-      setUsarTecladoNumerico(true);
     }
   }, [devolucion, isOpen]);
 
@@ -110,7 +105,6 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
     setNombreCliente('');
     setProductos([]);
     setCurrentProducto({ codigo: '', cantidad: '', descripcion: '' });
-    setUsarTecladoNumerico(true);
     onClose();
   };
 
@@ -156,30 +150,14 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
               <VStack spacing={3} align="stretch">
                 <FormControl isRequired>
                   <FormLabel fontSize="sm">Código</FormLabel>
-                  <InputGroup>
-                    <Input
-                      ref={codigoRef}
-                      value={currentProducto.codigo}
-                      onChange={(e) => setCurrentProducto({ ...currentProducto, codigo: e.target.value })}
-                      onKeyPress={(e) => handleKeyPress(e, cantidadRef)}
-                      placeholder="Ej: 3480"
-                      type={usarTecladoNumerico ? "tel" : "text"}
-                      enterKeyHint="done"
-                      pr="3.5rem"
-                    />
-                    <InputRightElement width="3.5rem">
-                      <Button
-                        h="1.75rem"
-                        size="sm"
-                        onClick={() => setUsarTecladoNumerico(!usarTecladoNumerico)}
-                        fontSize="xs"
-                        colorScheme={usarTecladoNumerico ? "gray" : "primary"}
-                        variant="ghost"
-                      >
-                        {usarTecladoNumerico ? "ABC" : "123"}
-                      </Button>
-                    </InputRightElement>
-                  </InputGroup>
+                  <Input
+                    ref={codigoRef}
+                    value={currentProducto.codigo}
+                    onChange={(e) => setCurrentProducto({ ...currentProducto, codigo: e.target.value })}
+                    onKeyPress={(e) => handleKeyPress(e, cantidadRef)}
+                    placeholder="Ej: 3480"
+                    type="text"
+                  />
                 </FormControl>
 
                 <FormControl isRequired>
@@ -190,8 +168,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                     onChange={(e) => setCurrentProducto({ ...currentProducto, cantidad: e.target.value })}
                     onKeyPress={(e) => handleKeyPress(e, descripcionRef)}
                     placeholder="Ej: 2"
-                    type="tel"
-                    enterKeyHint="done"
+                    type="text"
                     min="1"
                   />
                 </FormControl>
@@ -204,7 +181,6 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                     onChange={(e) => setCurrentProducto({ ...currentProducto, descripcion: e.target.value })}
                     onKeyPress={(e) => handleKeyPress(e, null, 'addProducto')}
                     placeholder="Ej: Rotos, Vencidos, etc."
-                    enterKeyHint="done"
                   />
                 </FormControl>
 
