@@ -168,7 +168,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                     onChange={(e) => setCurrentProducto({ ...currentProducto, cantidad: e.target.value })}
                     onKeyPress={(e) => handleKeyPress(e, descripcionRef)}
                     placeholder="Ej: 2"
-                    type="number"
+                    type="text"
                     min="1"
                   />
                 </FormControl>
