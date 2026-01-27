@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -29,12 +29,24 @@ function Devoluciones({ onBack }) {
   const [searchName, setSearchName] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10); // Puedes cambiar este número
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
   const borderColors = ['#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0'];
 
-  const loadDevoluciones = useCallback(async () => {
+  useEffect(() => {
+    loadDevoluciones();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchName, searchDate]);
+
+  useEffect(() => {
+    // Reset a página 1 cuando cambien los filtros
+    setCurrentPage(1);
+  }, [searchName, searchDate]);
+
+  const loadDevoluciones = async () => {
     setIsLoading(true);
     try {
       const filters = {};
@@ -54,11 +66,7 @@ function Devoluciones({ onBack }) {
     } finally {
       setIsLoading(false);
     }
-  }, [searchName, searchDate, toast]);
-
-  useEffect(() => {
-    loadDevoluciones();
-  }, [loadDevoluciones]);
+  };
 
   const handleAddDevolucion = () => {
     setSelectedDevolucion(null);
@@ -227,7 +235,6 @@ function Devoluciones({ onBack }) {
   // Función para formatear fecha SIN conversión de zona horaria
   const formatearFecha = (fechaISO) => {
     const fecha = new Date(fechaISO);
-    // Usar getUTCDate, getUTCMonth, getUTCFullYear para mantener la fecha UTC
     const dia = fecha.getUTCDate();
     const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
                    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -249,11 +256,22 @@ function Devoluciones({ onBack }) {
   }, {});
 
   // Ordenar fechas de más reciente a más antigua
-  const fechasOrdenadas = Object.keys(devolucionesPorFecha).sort((a, b) => {
+  const todasLasFechas = Object.keys(devolucionesPorFecha).sort((a, b) => {
     const fechaA = devoluciones.find(d => formatearFecha(d.fecha) === a)?.fecha;
     const fechaB = devoluciones.find(d => formatearFecha(d.fecha) === b)?.fecha;
     return new Date(fechaB) - new Date(fechaA);
   });
+
+  // PAGINACIÓN: calcular fechas a mostrar en la página actual
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const fechasPaginadas = todasLasFechas.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(todasLasFechas.length / itemsPerPage);
+
+  const handlePageChange = (pageNumber) => {
+    setCurrentPage(pageNumber);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <Box minH="100vh" bg="white" pb={8}>
@@ -320,7 +338,7 @@ function Devoluciones({ onBack }) {
             {(searchName || searchDate) && (
               <HStack>
                 <Text fontSize="sm" color="gray.600">
-                  Mostrando {devoluciones.length} resultado(s)
+                  Mostrando {todasLasFechas.length} fecha(s) con resultados
                 </Text>
                 <Button
                   size="xs"
@@ -342,56 +360,118 @@ function Devoluciones({ onBack }) {
             <Flex justify="center" py={8}>
               <Spinner size="xl" color="primary.500" thickness="4px" />
             </Flex>
-          ) : fechasOrdenadas.length === 0 ? (
+          ) : todasLasFechas.length === 0 ? (
             <Text textAlign="center" color="gray.500" py={8}>
               {searchName || searchDate 
                 ? 'No se encontraron devoluciones con esos filtros'
                 : 'No hay devoluciones registradas'}
             </Text>
           ) : (
-            <VStack spacing={8} align="stretch">
-              {fechasOrdenadas.map((fecha) => {
-                const devolucionesDia = devolucionesPorFecha[fecha];
-                
-                return (
-                  <Box key={fecha}>
-                    {/* Header de Fecha */}
-                    <Flex align="center" mb={4}>
-                      <Badge 
-                        colorScheme="primary" 
-                        fontSize={{ base: 'sm', md: 'md' }}
-                        px={3}
-                        py={1}
-                        borderRadius="md"
-                      >
-                        {fecha}
-                      </Badge>
-                      <Divider ml={3} />
-                    </Flex>
+            <>
+              <VStack spacing={8} align="stretch">
+                {fechasPaginadas.map((fecha, fechaIndex) => {
+                  const devolucionesDia = devolucionesPorFecha[fecha];
+                  
+                  return (
+                    <Box key={fecha}>
+                      {/* Línea divisoria ANTES de cada fecha (excepto la primera) */}
+                      {fechaIndex > 0 && (
+                        <Divider 
+                          mb={8} 
+                          borderWidth="2px" 
+                          borderColor="gray.300"
+                        />
+                      )}
 
-                    {/* Cards de clientes */}
-                    <VStack spacing={3} align="stretch">
-                      {devolucionesDia.map((devolucion, index) => {
-                        const borderColor = borderColors[index % borderColors.length];
-                        
-                        return (
-                          <DevolucionCard
-                            key={devolucion._id}
-                            devolucion={devolucion}
-                            borderColor={borderColor}
-                            onEdit={() => handleEditDevolucion(devolucion)}
-                            onDelete={() => handleDeleteDevolucion(devolucion._id)}
-                            onToggleControlado={handleToggleControlado}
-                            onToggleMaquina={handleToggleMaquina}
-                            onUpdateProducto={handleUpdateProducto}
-                          />
-                        );
-                      })}
-                    </VStack>
-                  </Box>
-                );
-              })}
-            </VStack>
+                      {/* Header de Fecha con badge de cantidad */}
+                      <Flex align="center" mb={4}>
+                        <Badge 
+                          colorScheme="primary" 
+                          fontSize={{ base: 'sm', md: 'md' }}
+                          px={3}
+                          py={1}
+                          borderRadius="md"
+                        >
+                          {fecha}
+                        </Badge>
+                        <Badge 
+                          colorScheme="gray" 
+                          fontSize="xs"
+                          ml={2}
+                        >
+                          {devolucionesDia.length} {devolucionesDia.length === 1 ? 'devolución' : 'devoluciones'}
+                        </Badge>
+                        <Divider ml={3} />
+                      </Flex>
+
+                      {/* Cards de clientes */}
+                      <VStack spacing={3} align="stretch">
+                        {devolucionesDia.map((devolucion, index) => {
+                          const borderColor = borderColors[index % borderColors.length];
+                          
+                          return (
+                            <DevolucionCard
+                              key={devolucion._id}
+                              devolucion={devolucion}
+                              borderColor={borderColor}
+                              onEdit={() => handleEditDevolucion(devolucion)}
+                              onDelete={() => handleDeleteDevolucion(devolucion._id)}
+                              onToggleControlado={handleToggleControlado}
+                              onToggleMaquina={handleToggleMaquina}
+                              onUpdateProducto={handleUpdateProducto}
+                            />
+                          );
+                        })}
+                      </VStack>
+                    </Box>
+                  );
+                })}
+              </VStack>
+
+              {/* PAGINACIÓN */}
+              {totalPages > 1 && (
+                <Flex justify="center" align="center" gap={2} mt={6}>
+                  <Button
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    isDisabled={currentPage === 1}
+                    colorScheme="primary"
+                    variant="outline"
+                  >
+                    Anterior
+                  </Button>
+
+                  <HStack spacing={1}>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <Button
+                        key={page}
+                        size="sm"
+                        onClick={() => handlePageChange(page)}
+                        colorScheme="primary"
+                        variant={currentPage === page ? 'solid' : 'ghost'}
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                  </HStack>
+
+                  <Button
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    isDisabled={currentPage === totalPages}
+                    colorScheme="primary"
+                    variant="outline"
+                  >
+                    Siguiente
+                  </Button>
+                </Flex>
+              )}
+
+              {/* Indicador de página actual */}
+              <Text textAlign="center" fontSize="sm" color="gray.600">
+                Mostrando {fechasPaginadas.length} de {todasLasFechas.length} fechas
+              </Text>
+            </>
           )}
         </VStack>
       </Container>
