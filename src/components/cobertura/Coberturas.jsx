@@ -16,8 +16,12 @@ import {
   InputGroup,
   InputLeftElement,
   Spinner,
+  CircularProgress,
+  CircularProgressLabel,
+  Badge,
+  Progress,
 } from '@chakra-ui/react';
-import { ArrowBackIcon, AddIcon, SearchIcon, EditIcon, DeleteIcon } from '@chakra-ui/icons';
+import { ArrowBackIcon, AddIcon, SearchIcon, EditIcon, DeleteIcon, CheckCircleIcon } from '@chakra-ui/icons';
 import ClienteModal from './ClienteModal';
 import { coberturasService } from '../../services/coberturasService';
 
@@ -161,6 +165,39 @@ function Coberturas({ onBack, onVerProductos }) {
     onVerProductos(cliente);
   };
 
+  // Calcular porcentaje de completado para un cliente
+  const calcularPorcentajeCliente = (cliente) => {
+    const totalProductos = cliente.productosDanone.length + cliente.productosMastellone.length;
+    if (totalProductos === 0) return 0;
+    
+    const completados = 
+      cliente.productosDanone.filter(p => p.completado).length +
+      cliente.productosMastellone.filter(p => p.completado).length;
+    
+    return Math.round((completados / totalProductos) * 100);
+  };
+
+  // Calcular porcentaje total de TODOS los clientes filtrados
+  const calcularPorcentajeTotal = () => {
+    let totalProductos = 0;
+    let totalCompletados = 0;
+
+    filteredClientes.forEach(cliente => {
+      const totalDanone = cliente.productosDanone.length;
+      const totalMastellone = cliente.productosMastellone.length;
+      const completadosDanone = cliente.productosDanone.filter(p => p.completado).length;
+      const completadosMastellone = cliente.productosMastellone.filter(p => p.completado).length;
+
+      totalProductos += (totalDanone + totalMastellone);
+      totalCompletados += (completadosDanone + completadosMastellone);
+    });
+
+    if (totalProductos === 0) return 0;
+    return Math.round((totalCompletados / totalProductos) * 100);
+  };
+
+  const porcentajeTotal = calcularPorcentajeTotal();
+
   return (
     <Box minH="100vh" bg="white" pb={8}>
       {/* Header */}
@@ -193,6 +230,63 @@ function Coberturas({ onBack, onVerProductos }) {
           >
             Agregar Cliente
           </Button>
+
+          {/* NUEVO: Porcentaje Total General */}
+          {!isLoading && filteredClientes.length > 0 && (
+            <Box 
+              bg="white" 
+              border="3px solid" 
+              borderColor="secondary.500" 
+              borderRadius="lg" 
+              p={6}
+              shadow="lg"
+            >
+              <VStack spacing={4}>
+                <HStack spacing={3} w="100%" justify="center">
+                  <Text fontSize={{ base: 'lg', md: 'xl' }} fontWeight="bold" color="accent.900">
+                    Progreso Total de Coberturas
+                  </Text>
+                  {porcentajeTotal === 100 && (
+                    <CheckCircleIcon w={6} h={6} color="green.500" />
+                  )}
+                </HStack>
+                
+                <Flex justify="center" align="center" w="100%">
+                  <CircularProgress 
+                    value={porcentajeTotal} 
+                    size="140px" 
+                    thickness="14px"
+                    color={porcentajeTotal === 100 ? 'green.400' : 'secondary.500'}
+                  >
+                    <CircularProgressLabel fontSize="3xl" fontWeight="bold">
+                      {porcentajeTotal}%
+                    </CircularProgressLabel>
+                  </CircularProgress>
+                </Flex>
+
+                <Box w="100%">
+                  <Progress 
+                    value={porcentajeTotal} 
+                    size="lg" 
+                    colorScheme={porcentajeTotal === 100 ? 'green' : 'secondary'}
+                    borderRadius="full"
+                    hasStripe
+                    isAnimated
+                  />
+                </Box>
+
+                <HStack spacing={4} fontSize="sm" color="gray.600">
+                  <Text>
+                    <strong>{filteredClientes.length}</strong> {filteredClientes.length === 1 ? 'cliente' : 'clientes'}
+                  </Text>
+                  <Text>•</Text>
+                  <Text>
+                    <strong>{filteredClientes.filter(c => calcularPorcentajeCliente(c) === 100).length}</strong> completados
+                  </Text>
+                </HStack>
+              </VStack>
+            </Box>
+          )}
 
           {/* Filtros */}
           <VStack spacing={3} align="stretch">
@@ -251,6 +345,8 @@ function Coberturas({ onBack, onVerProductos }) {
 
               {filteredClientes.map((cliente, index) => {
                 const borderColor = borderColors[index % borderColors.length];
+                const porcentaje = calcularPorcentajeCliente(cliente);
+                const totalProductos = cliente.productosDanone.length + cliente.productosMastellone.length;
                 
                 return (
                   <Flex key={cliente._id} gap={3} position="relative" zIndex={1}>
@@ -294,20 +390,66 @@ function Coberturas({ onBack, onVerProductos }) {
                     >
                       <Flex justify="space-between" align="start">
                         <Box flex={1}>
-                          <Text
-                            fontSize={{ base: 'lg', md: 'xl' }}
-                            fontWeight="bold"
-                            color="accent.900"
-                          >
-                            {cliente.nombre} {cliente.apellido}
-                          </Text>
+                          <HStack spacing={2} mb={1}>
+                            <Text
+                              fontSize={{ base: 'lg', md: 'xl' }}
+                              fontWeight="bold"
+                              color="accent.900"
+                            >
+                              {cliente.nombre} {cliente.apellido}
+                            </Text>
+                            {porcentaje === 100 && (
+                              <CheckCircleIcon w={5} h={5} color="green.500" />
+                            )}
+                          </HStack>
+                          
                           <Text
                             fontSize="sm"
                             color="gray.600"
-                            mt={1}
+                            mb={2}
                           >
                             Frecuencia: {cliente.frecuencia === 'LMV' ? 'Lun, Mié, Vie' : 'Mar, Jue, Sáb'}
                           </Text>
+
+                          {/* NUEVO: Porcentaje individual */}
+                          <HStack spacing={3} align="center" mt={2}>
+                            <CircularProgress 
+                              value={porcentaje} 
+                              size="50px" 
+                              thickness="8px"
+                              color={porcentaje === 100 ? 'green.400' : 'secondary.500'}
+                            >
+                              <CircularProgressLabel fontSize="sm" fontWeight="bold">
+                                {porcentaje}%
+                              </CircularProgressLabel>
+                            </CircularProgress>
+                            
+                            <VStack align="start" spacing={0}>
+                              <Badge 
+                                colorScheme={porcentaje === 100 ? 'green' : 'gray'} 
+                                fontSize="xs"
+                              >
+                                {totalProductos} {totalProductos === 1 ? 'producto' : 'productos'}
+                              </Badge>
+                              {totalProductos > 0 && (
+                                <Text fontSize="xs" color="gray.500">
+                                  {Math.round((porcentaje * totalProductos) / 100)} completados
+                                </Text>
+                              )}
+                            </VStack>
+                          </HStack>
+
+                          {/* Barra de progreso */}
+                          <Box mt={3}>
+                            <Progress 
+                              value={porcentaje} 
+                              size="sm" 
+                              colorScheme={porcentaje === 100 ? 'green' : 'secondary'}
+                              borderRadius="full"
+                              hasStripe={porcentaje < 100}
+                              isAnimated={porcentaje < 100}
+                            />
+                          </Box>
                         </Box>
 
                         {/* Botones de acción */}
