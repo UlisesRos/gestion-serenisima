@@ -6,7 +6,6 @@ import {
   Box,
   HStack,
   Text,
-  Badge,
   Button,
   Collapse,
   VStack,
@@ -138,91 +137,72 @@ function OfflineIndicator({ onSyncComplete }) {
   // No mostrar nada si está online y no hay pendientes
   if (isOnline && pendingCount === 0) return null;
 
+  const bgColor = isOnline ? (pendingCount > 0 ? 'orange.500' : 'green.500') : 'red.500';
+  const borderColor = isOnline ? (pendingCount > 0 ? 'orange.300' : 'green.300') : 'red.300';
+
   return (
     <Box
       position="fixed"
-      top={4}
-      left="50%"
-      transform="translateX(-50%)"
+      top={3}
+      right={3}
       zIndex={9999}
-      w={{ base: '90vw', md: 'auto' }}
-      minW={{ md: '380px' }}
-      maxW="500px"
     >
-      {/* Barra principal */}
+      {/* Píldora chica — siempre visible */}
       <Box
-        bg={isOnline ? (pendingCount > 0 ? 'orange.500' : 'green.500') : 'red.500'}
+        bg={bgColor}
         color="white"
-        borderRadius="xl"
-        px={4}
-        py={3}
-        shadow="2xl"
+        borderRadius="full"
+        px={3}
+        py={1.5}
+        shadow="lg"
         cursor="pointer"
         onClick={() => setShowDetails(!showDetails)}
         transition="all 0.2s"
-        _hover={{ opacity: 0.95 }}
+        _hover={{ opacity: 0.9, transform: 'scale(1.05)' }}
+        _active={{ transform: 'scale(0.97)' }}
       >
-        <HStack justify="space-between" spacing={3}>
-          <HStack spacing={2}>
-            {isOnline ? (
-              pendingCount > 0 ? (
-                <WarningIcon w={5} h={5} />
-              ) : (
-                <CheckCircleIcon w={5} h={5} />
-              )
-            ) : (
-              <WarningIcon w={5} h={5} />
-            )}
-            <VStack align="start" spacing={0}>
-              <Text fontWeight="bold" fontSize="sm">
-                {isOnline
-                  ? pendingCount > 0
-                    ? '⚠️ Devoluciones sin sincronizar'
-                    : '✅ Conectado'
-                  : '📵 Modo Offline activo'}
-              </Text>
-              <Text fontSize="xs" opacity={0.9}>
-                {isOnline
-                  ? pendingCount > 0
-                    ? `${pendingCount} ${pendingCount === 1 ? 'operación pendiente' : 'operaciones pendientes'}`
-                    : 'Todo sincronizado'
-                  : 'Las devoluciones se guardan localmente'}
-              </Text>
-            </VStack>
-          </HStack>
-
-          <HStack spacing={2}>
-            {pendingCount > 0 && (
-              <Badge
-                bg="white"
-                color={isOnline ? 'orange.600' : 'red.600'}
-                borderRadius="full"
-                fontSize="sm"
-                px={2}
-              >
-                {pendingCount}
-              </Badge>
-            )}
-          </HStack>
+        <HStack spacing={1.5}>
+          {isOnline
+            ? pendingCount > 0
+              ? <WarningIcon w={3} h={3} />
+              : <CheckCircleIcon w={3} h={3} />
+            : <WarningIcon w={3} h={3} />
+          }
+          <Text fontWeight="bold" fontSize="xs" lineHeight={1}>
+            {isOnline
+              ? pendingCount > 0
+                ? `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''}`
+                : 'Sincronizado'
+              : 'Offline'}
+          </Text>
         </HStack>
       </Box>
 
-      {/* Panel expandible */}
+      {/* Panel expandido al tocar */}
       <Collapse in={showDetails} animateOpacity>
         <Box
           bg="white"
           border="2px solid"
-          borderColor={isOnline ? 'orange.300' : 'red.300'}
+          borderColor={borderColor}
           borderRadius="xl"
           mt={2}
           p={4}
-          shadow="xl"
+          shadow="2xl"
+          w="260px"
         >
           <VStack spacing={3} align="stretch">
-            <Text fontSize="sm" color="gray.600" fontWeight="medium">
+            <Text fontSize="sm" fontWeight="bold" color="gray.700">
               {isOnline
-                ? `Tenés ${pendingCount} ${pendingCount === 1 ? 'devolución' : 'devoluciones'} guardadas localmente que todavía no se subieron al servidor.`
-                : 'Estás sin internet. Todo lo que cargues se guarda en tu dispositivo y se sube automáticamente cuando vuelva la conexión.'}
+                ? pendingCount > 0
+                  ? '⚠️ Sin sincronizar'
+                  : '✅ Todo sincronizado'
+                : '📵 Modo offline'}
+            </Text>
+
+            <Text fontSize="xs" color="gray.600">
+              {isOnline
+                ? `Tenés ${pendingCount} ${pendingCount === 1 ? 'devolución guardada' : 'devoluciones guardadas'} localmente que todavía no se subieron al servidor.`
+                : 'Sin internet. Todo lo que cargues se guarda en tu dispositivo y se sube solo cuando vuelva la conexión.'}
             </Text>
 
             {isOnline && pendingCount > 0 && (
@@ -239,16 +219,16 @@ function OfflineIndicator({ onSyncComplete }) {
             )}
 
             {!isOnline && (
-              <HStack 
-                bg="red.50" 
-                p={3} 
-                borderRadius="md" 
-                border="1px solid" 
+              <HStack
+                bg="red.50"
+                p={2}
+                borderRadius="md"
+                border="1px solid"
                 borderColor="red.200"
               >
-                <Icon as={WarningIcon} color="red.500" />
+                <Icon as={WarningIcon} color="red.500" w={3} h={3} flexShrink={0} />
                 <Text fontSize="xs" color="red.700">
-                  Podés seguir cargando devoluciones normalmente. Se van a subir solas cuando vuelva el internet.
+                  Podés seguir cargando devoluciones normalmente.
                 </Text>
               </HStack>
             )}
