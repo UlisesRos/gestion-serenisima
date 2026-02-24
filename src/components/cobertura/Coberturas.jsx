@@ -20,6 +20,8 @@ import {
   CircularProgressLabel,
   Badge,
   Progress,
+  Divider,
+  SimpleGrid,
 } from '@chakra-ui/react';
 import { ArrowBackIcon, AddIcon, SearchIcon, EditIcon, DeleteIcon, CheckCircleIcon } from '@chakra-ui/icons';
 import ClienteModal from './ClienteModal';
@@ -30,26 +32,24 @@ function Coberturas({ onBack, onVerProductos }) {
   const [filteredClientes, setFilteredClientes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [frecuenciaFilter, setFrecuenciaFilter] = useState('todos');
+  const [coberturaFilter, setCoberturaFilter] = useState('todos');
   const [selectedCliente, setSelectedCliente] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
-  // Colores para los bordes de los cards (alternando)
   const borderColors = ['#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0'];
 
-  // Cargar clientes al montar el componente
   useEffect(() => {
     loadClientes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Filtrar clientes cuando cambian los filtros
   useEffect(() => {
     filterClientes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, frecuenciaFilter, clientes]);
+  }, [searchTerm, frecuenciaFilter, coberturaFilter, clientes]);
 
   const loadClientes = async () => {
     setIsLoading(true);
@@ -57,7 +57,7 @@ function Coberturas({ onBack, onVerProductos }) {
       const data = await coberturasService.getAllClientes();
       setClientes(data);
     } catch (error) {
-      console.error(error)
+      console.error(error);
       toast({
         title: 'Error al cargar clientes',
         description: 'No se pudieron cargar los clientes del servidor',
@@ -70,10 +70,19 @@ function Coberturas({ onBack, onVerProductos }) {
     }
   };
 
+  // Determinar el tipo de cobertura de un cliente
+  const getTipoCobertura = (cliente) => {
+    const tieneDanone = cliente.productosDanone.length > 0;
+    const tieneMastellone = cliente.productosMastellone.length > 0;
+    if (tieneDanone && tieneMastellone) return 'ambas';
+    if (tieneDanone) return 'danone';
+    if (tieneMastellone) return 'mastellone';
+    return 'ninguna';
+  };
+
   const filterClientes = () => {
     let filtered = [...clientes];
 
-    // Filtrar por búsqueda
     if (searchTerm) {
       filtered = filtered.filter((cliente) =>
         `${cliente.nombre} ${cliente.apellido}`
@@ -82,9 +91,19 @@ function Coberturas({ onBack, onVerProductos }) {
       );
     }
 
-    // Filtrar por frecuencia
     if (frecuenciaFilter !== 'todos') {
       filtered = filtered.filter((cliente) => cliente.frecuencia === frecuenciaFilter);
+    }
+
+    // Filtro por tipo de cobertura
+    if (coberturaFilter !== 'todos') {
+      filtered = filtered.filter((cliente) => {
+        const tipo = getTipoCobertura(cliente);
+        if (coberturaFilter === 'ambas') return tipo === 'ambas';
+        if (coberturaFilter === 'danone') return tipo === 'danone' || tipo === 'ambas';
+        if (coberturaFilter === 'mastellone') return tipo === 'mastellone' || tipo === 'ambas';
+        return true;
+      });
     }
 
     setFilteredClientes(filtered);
@@ -115,7 +134,7 @@ function Coberturas({ onBack, onVerProductos }) {
         });
         loadClientes();
       } catch (error) {
-        console.error(error)
+        console.error(error);
         toast({
           title: 'Error al eliminar',
           description: 'No se pudo eliminar el cliente',
@@ -149,7 +168,7 @@ function Coberturas({ onBack, onVerProductos }) {
       loadClientes();
       onClose();
     } catch (error) {
-      console.error(error)
+      console.error(error);
       toast({
         title: 'Error al guardar',
         description: 'No se pudo guardar el cliente',
@@ -161,11 +180,9 @@ function Coberturas({ onBack, onVerProductos }) {
   };
 
   const handleClienteClick = (cliente) => {
-    // Navegar a la pantalla de productos
     onVerProductos(cliente);
   };
 
-  // Calcular porcentaje de completado para un cliente
   const calcularPorcentajeCliente = (cliente) => {
     const totalProductos = cliente.productosDanone.length + cliente.productosMastellone.length;
     if (totalProductos === 0) return 0;
@@ -177,26 +194,53 @@ function Coberturas({ onBack, onVerProductos }) {
     return Math.round((completados / totalProductos) * 100);
   };
 
-  // Calcular porcentaje total de TODOS los clientes filtrados
+  // Calcular porcentaje total general
   const calcularPorcentajeTotal = () => {
     let totalProductos = 0;
     let totalCompletados = 0;
 
     filteredClientes.forEach(cliente => {
-      const totalDanone = cliente.productosDanone.length;
-      const totalMastellone = cliente.productosMastellone.length;
-      const completadosDanone = cliente.productosDanone.filter(p => p.completado).length;
-      const completadosMastellone = cliente.productosMastellone.filter(p => p.completado).length;
-
-      totalProductos += (totalDanone + totalMastellone);
-      totalCompletados += (completadosDanone + completadosMastellone);
+      totalProductos += cliente.productosDanone.length + cliente.productosMastellone.length;
+      totalCompletados += 
+        cliente.productosDanone.filter(p => p.completado).length +
+        cliente.productosMastellone.filter(p => p.completado).length;
     });
 
     if (totalProductos === 0) return 0;
     return Math.round((totalCompletados / totalProductos) * 100);
   };
 
+  // Calcular porcentaje solo de Danone
+  const calcularPorcentajeDanone = () => {
+    let total = 0;
+    let completados = 0;
+
+    filteredClientes.forEach(cliente => {
+      total += cliente.productosDanone.length;
+      completados += cliente.productosDanone.filter(p => p.completado).length;
+    });
+
+    if (total === 0) return { porcentaje: 0, completados, total };
+    return { porcentaje: Math.round((completados / total) * 100), completados, total };
+  };
+
+  // Calcular porcentaje solo de Mastellone
+  const calcularPorcentajeMastellone = () => {
+    let total = 0;
+    let completados = 0;
+
+    filteredClientes.forEach(cliente => {
+      total += cliente.productosMastellone.length;
+      completados += cliente.productosMastellone.filter(p => p.completado).length;
+    });
+
+    if (total === 0) return { porcentaje: 0, completados, total };
+    return { porcentaje: Math.round((completados / total) * 100), completados, total };
+  };
+
   const porcentajeTotal = calcularPorcentajeTotal();
+  const danoneStats = calcularPorcentajeDanone();
+  const mastelloneStats = calcularPorcentajeMastellone();
 
   return (
     <Box minH="100vh" bg="white" pb={8}>
@@ -231,17 +275,19 @@ function Coberturas({ onBack, onVerProductos }) {
             Agregar Cliente
           </Button>
 
-          {/* NUEVO: Porcentaje Total General */}
+          {/* Panel de Progreso General */}
           {!isLoading && filteredClientes.length > 0 && (
             <Box 
               bg="white" 
               border="3px solid" 
               borderColor="secondary.500" 
               borderRadius="lg" 
-              p={6}
+              p={5}
               shadow="lg"
             >
-              <VStack spacing={4}>
+              <VStack spacing={5}>
+
+                {/* Título general */}
                 <HStack spacing={3} w="100%" justify="center">
                   <Text fontSize={{ base: 'lg', md: 'xl' }} fontWeight="bold" color="accent.900">
                     Progreso Total de Coberturas
@@ -250,15 +296,16 @@ function Coberturas({ onBack, onVerProductos }) {
                     <CheckCircleIcon w={6} h={6} color="green.500" />
                   )}
                 </HStack>
-                
+
+                {/* Circular general */}
                 <Flex justify="center" align="center" w="100%">
                   <CircularProgress 
                     value={porcentajeTotal} 
-                    size="140px" 
+                    size="130px" 
                     thickness="14px"
                     color={porcentajeTotal === 100 ? 'green.400' : 'secondary.500'}
                   >
-                    <CircularProgressLabel fontSize="3xl" fontWeight="bold">
+                    <CircularProgressLabel fontSize="2xl" fontWeight="bold">
                       {porcentajeTotal}%
                     </CircularProgressLabel>
                   </CircularProgress>
@@ -284,6 +331,85 @@ function Coberturas({ onBack, onVerProductos }) {
                     <strong>{filteredClientes.filter(c => calcularPorcentajeCliente(c) === 100).length}</strong> completados
                   </Text>
                 </HStack>
+
+                <Divider />
+
+                {/* Desglose Danone / Mastellone */}
+                <SimpleGrid columns={2} spacing={4} w="100%">
+                  
+                  {/* Danone */}
+                  <Box
+                    bg="blue.50"
+                    border="2px solid"
+                    borderColor="blue.200"
+                    borderRadius="md"
+                    p={4}
+                    textAlign="center"
+                  >
+                    <Text fontSize="sm" fontWeight="bold" color="blue.700" mb={3}>
+                      🥛 Danone
+                    </Text>
+                    <Flex justify="center" mb={3}>
+                      <CircularProgress 
+                        value={danoneStats.porcentaje} 
+                        size="80px" 
+                        thickness="10px"
+                        color={danoneStats.porcentaje === 100 ? 'green.400' : 'blue.400'}
+                      >
+                        <CircularProgressLabel fontSize="md" fontWeight="bold" color="blue.700">
+                          {danoneStats.porcentaje}%
+                        </CircularProgressLabel>
+                      </CircularProgress>
+                    </Flex>
+                    <Progress 
+                      value={danoneStats.porcentaje} 
+                      size="sm" 
+                      colorScheme={danoneStats.porcentaje === 100 ? 'green' : 'blue'}
+                      borderRadius="full"
+                      mb={2}
+                    />
+                    <Text fontSize="xs" color="blue.600">
+                      {danoneStats.completados} / {danoneStats.total} productos
+                    </Text>
+                  </Box>
+
+                  {/* Mastellone */}
+                  <Box
+                    bg="orange.50"
+                    border="2px solid"
+                    borderColor="orange.200"
+                    borderRadius="md"
+                    p={4}
+                    textAlign="center"
+                  >
+                    <Text fontSize="sm" fontWeight="bold" color="orange.700" mb={3}>
+                      🧀 Mastellone
+                    </Text>
+                    <Flex justify="center" mb={3}>
+                      <CircularProgress 
+                        value={mastelloneStats.porcentaje} 
+                        size="80px" 
+                        thickness="10px"
+                        color={mastelloneStats.porcentaje === 100 ? 'green.400' : 'orange.400'}
+                      >
+                        <CircularProgressLabel fontSize="md" fontWeight="bold" color="orange.700">
+                          {mastelloneStats.porcentaje}%
+                        </CircularProgressLabel>
+                      </CircularProgress>
+                    </Flex>
+                    <Progress 
+                      value={mastelloneStats.porcentaje} 
+                      size="sm" 
+                      colorScheme={mastelloneStats.porcentaje === 100 ? 'green' : 'orange'}
+                      borderRadius="full"
+                      mb={2}
+                    />
+                    <Text fontSize="xs" color="orange.600">
+                      {mastelloneStats.completados} / {mastelloneStats.total} productos
+                    </Text>
+                  </Box>
+
+                </SimpleGrid>
               </VStack>
             </Box>
           )}
@@ -317,16 +443,31 @@ function Coberturas({ onBack, onVerProductos }) {
               <option value="LMV">Lunes, Miércoles, Viernes</option>
               <option value="MJS">Martes, Jueves, Sábado</option>
             </Select>
+
+            {/* Nuevo filtro por tipo de cobertura */}
+            <Select
+              value={coberturaFilter}
+              onChange={(e) => setCoberturaFilter(e.target.value)}
+              bg="white"
+              border="2px solid"
+              borderColor="gray.200"
+              _focus={{ borderColor: 'secondary.500' }}
+            >
+              <option value="todos">Todas las coberturas</option>
+              <option value="danone">🥛 Con Danone</option>
+              <option value="mastellone">🧀 Con Mastellone</option>
+              <option value="ambas">🥛🧀 Con ambas empresas</option>
+            </Select>
           </VStack>
 
-          {/* Lista de Clientes - Estilo Timeline */}
+          {/* Lista de Clientes */}
           {isLoading ? (
             <Flex justify="center" py={8}>
               <Spinner size="xl" color="secondary.500" thickness="4px" />
             </Flex>
           ) : filteredClientes.length === 0 ? (
             <Text textAlign="center" color="gray.500" py={8}>
-              {searchTerm || frecuenciaFilter !== 'todos' 
+              {searchTerm || frecuenciaFilter !== 'todos' || coberturaFilter !== 'todos'
                 ? 'No se encontraron clientes con esos filtros'
                 : 'No hay clientes. ¡Agrega uno!'}
             </Text>
@@ -347,6 +488,7 @@ function Coberturas({ onBack, onVerProductos }) {
                 const borderColor = borderColors[index % borderColors.length];
                 const porcentaje = calcularPorcentajeCliente(cliente);
                 const totalProductos = cliente.productosDanone.length + cliente.productosMastellone.length;
+                const tipo = getTipoCobertura(cliente);
                 
                 return (
                   <Flex key={cliente._id} gap={3} position="relative" zIndex={1}>
@@ -403,15 +545,20 @@ function Coberturas({ onBack, onVerProductos }) {
                             )}
                           </HStack>
                           
-                          <Text
-                            fontSize="sm"
-                            color="gray.600"
-                            mb={2}
-                          >
-                            Frecuencia: {cliente.frecuencia === 'LMV' ? 'Lun, Mié, Vie' : 'Mar, Jue, Sáb'}
-                          </Text>
+                          <HStack spacing={2} mb={2} flexWrap="wrap">
+                            <Text fontSize="sm" color="gray.600">
+                              Frecuencia: {cliente.frecuencia === 'LMV' ? 'Lun, Mié, Vie' : 'Mar, Jue, Sáb'}
+                            </Text>
+                            {/* Badge de tipo de cobertura */}
+                            {(tipo === 'danone' || tipo === 'ambas') && (
+                              <Badge colorScheme="blue" fontSize="xs">🥛 Danone</Badge>
+                            )}
+                            {(tipo === 'mastellone' || tipo === 'ambas') && (
+                              <Badge colorScheme="orange" fontSize="xs">🧀 Mastellone</Badge>
+                            )}
+                          </HStack>
 
-                          {/* NUEVO: Porcentaje individual */}
+                          {/* Porcentaje individual */}
                           <HStack spacing={3} align="center" mt={2}>
                             <CircularProgress 
                               value={porcentaje} 

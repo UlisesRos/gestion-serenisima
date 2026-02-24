@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+// src/components/devolucion/Devoluciones.jsx
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -17,11 +18,14 @@ import {
   InputGroup,
   InputLeftElement,
   Spinner,
+  Icon,
 } from '@chakra-ui/react';
-import { ArrowBackIcon, AddIcon, SearchIcon } from '@chakra-ui/icons';
+import { ArrowBackIcon, AddIcon, SearchIcon, WarningIcon } from '@chakra-ui/icons';
 import DevolucionModal from './DevolucionModal';
 import DevolucionCard from './DevolucionCard';
 import { devolucionesService } from '../../services/devolucionesService';
+import OfflineIndicator from '../shared/OfflineIndicator';
+import { checkOnlineStatus } from '../../services/syncService';
 
 function Devoluciones({ onBack }) {
   const [devoluciones, setDevoluciones] = useState([]);
@@ -29,26 +33,20 @@ function Devoluciones({ onBack }) {
   const [searchName, setSearchName] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10); // Puedes cambiar este número
+  const [itemsPerPage] = useState(10);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
   const borderColors = ['#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0'];
 
-  useEffect(() => {
-    loadDevoluciones();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchName, searchDate]);
-
-  useEffect(() => {
-    // Reset a página 1 cuando cambien los filtros
-    setCurrentPage(1);
-  }, [searchName, searchDate]);
-
-  const loadDevoluciones = async () => {
+  const loadDevoluciones = useCallback(async () => {
     setIsLoading(true);
     try {
+      const online = await checkOnlineStatus();
+      setIsOnline(online);
+
       const filters = {};
       if (searchName) filters.nombre = searchName;
       if (searchDate) filters.fecha = searchDate;
@@ -58,7 +56,7 @@ function Devoluciones({ onBack }) {
     } catch {
       toast({
         title: 'Error al cargar devoluciones',
-        description: 'No se pudieron cargar las devoluciones del servidor',
+        description: 'No se pudieron cargar las devoluciones',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -66,7 +64,27 @@ function Devoluciones({ onBack }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [searchName, searchDate, toast]);
+
+  useEffect(() => {
+    loadDevoluciones();
+  }, [loadDevoluciones]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchName, searchDate]);
+
+  // Escuchar cambios de conectividad
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleAddDevolucion = () => {
     setSelectedDevolucion(null);
@@ -76,23 +94,34 @@ function Devoluciones({ onBack }) {
   const handleSaveDevolucion = async (devolucionData) => {
     try {
       if (selectedDevolucion) {
-        await devolucionesService.updateDevolucion(selectedDevolucion._id, devolucionData);
+        const updated = await devolucionesService.updateDevolucion(
+          selectedDevolucion._id,
+          devolucionData
+        );
+        setDevoluciones(prev =>
+          prev.map(d => d._id === selectedDevolucion._id ? { ...d, ...updated } : d)
+        );
         toast({
-          title: 'Devolución actualizada',
+          title: isOnline ? 'Devolución actualizada' : '💾 Devolución guardada localmente',
+          description: !isOnline ? 'Se subirá al servidor cuando vuelva la conexión' : undefined,
           status: 'success',
-          duration: 2000,
+          duration: 3000,
           isClosable: true,
         });
       } else {
-        await devolucionesService.createDevolucion(devolucionData);
+        const nueva = await devolucionesService.createDevolucion(devolucionData);
+        // Agregar al inicio de la lista para que aparezca primero
+        setDevoluciones(prev => [nueva, ...prev]);
         toast({
-          title: 'Devolución agregada',
-          status: 'success',
-          duration: 2000,
+          title: isOnline ? '✅ Devolución agregada' : '💾 Devolución guardada sin conexión',
+          description: !isOnline
+            ? 'Se guardó en tu dispositivo. Se subirá al servidor cuando vuelva el internet.'
+            : undefined,
+          status: isOnline ? 'success' : 'info',
+          duration: 4000,
           isClosable: true,
         });
       }
-      loadDevoluciones();
       onClose();
     } catch {
       toast({
@@ -114,17 +143,17 @@ function Devoluciones({ onBack }) {
     if (window.confirm('¿Eliminar esta devolución?')) {
       try {
         await devolucionesService.deleteDevolucion(id);
+        setDevoluciones(prev => prev.filter(d => d._id !== id));
         toast({
-          title: 'Devolución eliminada',
+          title: isOnline ? 'Devolución eliminada' : 'Eliminación pendiente',
+          description: !isOnline ? 'Se eliminará del servidor cuando vuelva la conexión' : undefined,
           status: 'success',
           duration: 2000,
           isClosable: true,
         });
-        loadDevoluciones();
       } catch {
         toast({
           title: 'Error al eliminar',
-          description: 'No se pudo eliminar la devolución',
           status: 'error',
           duration: 3000,
           isClosable: true,
@@ -134,16 +163,15 @@ function Devoluciones({ onBack }) {
   };
 
   const handleToggleControlado = async (devolucionId, productoId) => {
-    setDevoluciones(prevDevoluciones => 
-      prevDevoluciones.map(dev => {
+    // Actualización optimista local
+    setDevoluciones(prev =>
+      prev.map(dev => {
         if (dev._id === devolucionId) {
           return {
             ...dev,
-            productos: dev.productos.map(prod => 
-              prod._id === productoId 
-                ? { ...prod, controlado: !prod.controlado }
-                : prod
-            )
+            productos: dev.productos.map(prod =>
+              prod._id === productoId ? { ...prod, controlado: !prod.controlado } : prod
+            ),
           };
         }
         return dev;
@@ -156,7 +184,6 @@ function Devoluciones({ onBack }) {
       loadDevoluciones();
       toast({
         title: 'Error al actualizar',
-        description: 'No se pudo actualizar el estado',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -165,16 +192,14 @@ function Devoluciones({ onBack }) {
   };
 
   const handleToggleMaquina = async (devolucionId, productoId) => {
-    setDevoluciones(prevDevoluciones => 
-      prevDevoluciones.map(dev => {
+    setDevoluciones(prev =>
+      prev.map(dev => {
         if (dev._id === devolucionId) {
           return {
             ...dev,
-            productos: dev.productos.map(prod => 
-              prod._id === productoId 
-                ? { ...prod, pasadoMaquina: !prod.pasadoMaquina }
-                : prod
-            )
+            productos: dev.productos.map(prod =>
+              prod._id === productoId ? { ...prod, pasadoMaquina: !prod.pasadoMaquina } : prod
+            ),
           };
         }
         return dev;
@@ -187,7 +212,6 @@ function Devoluciones({ onBack }) {
       loadDevoluciones();
       toast({
         title: 'Error al actualizar',
-        description: 'No se pudo actualizar el estado',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -196,16 +220,14 @@ function Devoluciones({ onBack }) {
   };
 
   const handleUpdateProducto = async (devolucionId, productoId, data) => {
-    setDevoluciones(prevDevoluciones => 
-      prevDevoluciones.map(dev => {
+    setDevoluciones(prev =>
+      prev.map(dev => {
         if (dev._id === devolucionId) {
           return {
             ...dev,
-            productos: dev.productos.map(prod => 
-              prod._id === productoId 
-                ? { ...prod, ...data }
-                : prod
-            )
+            productos: dev.productos.map(prod =>
+              prod._id === productoId ? { ...prod, ...data } : prod
+            ),
           };
         }
         return dev;
@@ -214,55 +236,36 @@ function Devoluciones({ onBack }) {
 
     try {
       await devolucionesService.updateProducto(devolucionId, productoId, data);
-      toast({
-        title: 'Producto actualizado',
-        status: 'success',
-        duration: 1500,
-        isClosable: true,
-      });
+      toast({ title: 'Producto actualizado', status: 'success', duration: 1500, isClosable: true });
     } catch {
       loadDevoluciones();
-      toast({
-        title: 'Error al actualizar',
-        description: 'No se pudo actualizar el producto',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
+      toast({ title: 'Error al actualizar', status: 'error', duration: 3000, isClosable: true });
     }
   };
 
-  // Función para formatear fecha SIN conversión de zona horaria
   const formatearFecha = (fechaISO) => {
     const fecha = new Date(fechaISO);
     const dia = fecha.getUTCDate();
-    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
-                   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     const mes = meses[fecha.getUTCMonth()];
     const año = fecha.getUTCFullYear();
-    
     return `${dia} de ${mes} de ${año}`;
   };
 
-  // Agrupar devoluciones por fecha (usando UTC)
   const devolucionesPorFecha = devoluciones.reduce((acc, dev) => {
     const fechaFormateada = formatearFecha(dev.fecha);
-    
-    if (!acc[fechaFormateada]) {
-      acc[fechaFormateada] = [];
-    }
+    if (!acc[fechaFormateada]) acc[fechaFormateada] = [];
     acc[fechaFormateada].push(dev);
     return acc;
   }, {});
 
-  // Ordenar fechas de más reciente a más antigua
   const todasLasFechas = Object.keys(devolucionesPorFecha).sort((a, b) => {
     const fechaA = devoluciones.find(d => formatearFecha(d.fecha) === a)?.fecha;
     const fechaB = devoluciones.find(d => formatearFecha(d.fecha) === b)?.fecha;
     return new Date(fechaB) - new Date(fechaA);
   });
 
-  // PAGINACIÓN: calcular fechas a mostrar en la página actual
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const fechasPaginadas = todasLasFechas.slice(indexOfFirstItem, indexOfLastItem);
@@ -274,27 +277,66 @@ function Devoluciones({ onBack }) {
   };
 
   return (
-    <Box minH="100vh" bg="white" pb={8}>
+    <Box minH="100vh" bg="white" pb={24}>
       {/* Header */}
       <Box bg="primary.500" color="white" py={4} px={4} shadow="md">
         <Container maxW="container.lg" px={0}>
-          <HStack spacing={3}>
-            <IconButton
-              icon={<ArrowBackIcon />}
-              onClick={onBack}
-              variant="ghost"
-              color="white"
-              _hover={{ bg: 'whiteAlpha.200' }}
-              aria-label="Volver"
-            />
-            <Heading size={{ base: 'md', md: 'lg' }}>Devoluciones</Heading>
+          <HStack spacing={3} justify="space-between">
+            <HStack spacing={3}>
+              <IconButton
+                icon={<ArrowBackIcon />}
+                onClick={onBack}
+                variant="ghost"
+                color="white"
+                _hover={{ bg: 'whiteAlpha.200' }}
+                aria-label="Volver"
+              />
+              <Heading size={{ base: 'md', md: 'lg' }}>Devoluciones</Heading>
+            </HStack>
+
+            {/* Indicador de estado en el header */}
+            {!isOnline && (
+              <HStack
+                bg="whiteAlpha.200"
+                px={3}
+                py={1}
+                borderRadius="full"
+                spacing={1}
+              >
+                <Icon as={WarningIcon} w={3} h={3} />
+                <Text fontSize="xs" fontWeight="bold">OFFLINE</Text>
+              </HStack>
+            )}
           </HStack>
         </Container>
       </Box>
 
       <Container maxW="container.lg" px={4} py={6}>
         <VStack spacing={6} align="stretch">
-          
+
+          {/* Banner offline */}
+          {!isOnline && (
+            <Box
+              bg="orange.50"
+              border="2px solid"
+              borderColor="orange.300"
+              borderRadius="lg"
+              p={4}
+            >
+              <HStack spacing={3}>
+                <Icon as={WarningIcon} color="orange.500" w={5} h={5} flexShrink={0} />
+                <VStack align="start" spacing={0}>
+                  <Text fontWeight="bold" color="orange.700" fontSize="sm">
+                    Modo offline activo
+                  </Text>
+                  <Text color="orange.600" fontSize="xs">
+                    Podés cargar devoluciones normalmente. Se guardan en tu dispositivo y se suben solos cuando vuelva el internet.
+                  </Text>
+                </VStack>
+              </HStack>
+            </Box>
+          )}
+
           {/* Botón Agregar */}
           <Button
             leftIcon={<AddIcon />}
@@ -334,7 +376,6 @@ function Devoluciones({ onBack }) {
               _focus={{ borderColor: 'primary.500' }}
             />
 
-            {/* Indicador de filtros activos */}
             {(searchName || searchDate) && (
               <HStack>
                 <Text fontSize="sm" color="gray.600">
@@ -344,10 +385,7 @@ function Devoluciones({ onBack }) {
                   size="xs"
                   variant="ghost"
                   colorScheme="red"
-                  onClick={() => {
-                    setSearchName('');
-                    setSearchDate('');
-                  }}
+                  onClick={() => { setSearchName(''); setSearchDate(''); }}
                 >
                   Limpiar filtros
                 </Button>
@@ -355,14 +393,14 @@ function Devoluciones({ onBack }) {
             )}
           </VStack>
 
-          {/* Lista agrupada por fechas */}
+          {/* Lista */}
           {isLoading ? (
             <Flex justify="center" py={8}>
               <Spinner size="xl" color="primary.500" thickness="4px" />
             </Flex>
           ) : todasLasFechas.length === 0 ? (
             <Text textAlign="center" color="gray.500" py={8}>
-              {searchName || searchDate 
+              {searchName || searchDate
                 ? 'No se encontraron devoluciones con esos filtros'
                 : 'No hay devoluciones registradas'}
             </Text>
@@ -371,22 +409,16 @@ function Devoluciones({ onBack }) {
               <VStack spacing={8} align="stretch">
                 {fechasPaginadas.map((fecha, fechaIndex) => {
                   const devolucionesDia = devolucionesPorFecha[fecha];
-                  
+
                   return (
                     <Box key={fecha}>
-                      {/* Línea divisoria ANTES de cada fecha (excepto la primera) */}
                       {fechaIndex > 0 && (
-                        <Divider 
-                          mb={8} 
-                          borderWidth="2px" 
-                          borderColor="gray.300"
-                        />
+                        <Divider mb={8} borderWidth="2px" borderColor="gray.300" />
                       )}
 
-                      {/* Header de Fecha con badge de cantidad */}
                       <Flex align="center" mb={4}>
-                        <Badge 
-                          colorScheme="primary" 
+                        <Badge
+                          colorScheme="primary"
                           fontSize={{ base: 'sm', md: 'md' }}
                           px={3}
                           py={1}
@@ -394,32 +426,41 @@ function Devoluciones({ onBack }) {
                         >
                           {fecha}
                         </Badge>
-                        <Badge 
-                          colorScheme="gray" 
-                          fontSize="xs"
-                          ml={2}
-                        >
+                        <Badge colorScheme="gray" fontSize="xs" ml={2}>
                           {devolucionesDia.length} {devolucionesDia.length === 1 ? 'devolución' : 'devoluciones'}
                         </Badge>
                         <Divider ml={3} />
                       </Flex>
 
-                      {/* Cards de clientes */}
                       <VStack spacing={3} align="stretch">
                         {devolucionesDia.map((devolucion, index) => {
                           const borderColor = borderColors[index % borderColors.length];
-                          
+
                           return (
-                            <DevolucionCard
-                              key={devolucion._id}
-                              devolucion={devolucion}
-                              borderColor={borderColor}
-                              onEdit={() => handleEditDevolucion(devolucion)}
-                              onDelete={() => handleDeleteDevolucion(devolucion._id)}
-                              onToggleControlado={handleToggleControlado}
-                              onToggleMaquina={handleToggleMaquina}
-                              onUpdateProducto={handleUpdateProducto}
-                            />
+                            <Box key={devolucion._id} position="relative">
+                              {/* Indicador de offline en la card */}
+                              {devolucion._isOffline && (
+                                <Badge
+                                  position="absolute"
+                                  top={-2}
+                                  right={2}
+                                  zIndex={1}
+                                  colorScheme="orange"
+                                  fontSize="xs"
+                                >
+                                  💾 Sin sincronizar
+                                </Badge>
+                              )}
+                              <DevolucionCard
+                                devolucion={devolucion}
+                                borderColor={devolucion._isOffline ? '#ed8936' : borderColor}
+                                onEdit={() => handleEditDevolucion(devolucion)}
+                                onDelete={() => handleDeleteDevolucion(devolucion._id)}
+                                onToggleControlado={handleToggleControlado}
+                                onToggleMaquina={handleToggleMaquina}
+                                onUpdateProducto={handleUpdateProducto}
+                              />
+                            </Box>
                           );
                         })}
                       </VStack>
@@ -428,7 +469,6 @@ function Devoluciones({ onBack }) {
                 })}
               </VStack>
 
-              {/* PAGINACIÓN */}
               {totalPages > 1 && (
                 <Flex justify="center" align="center" gap={2} mt={6}>
                   <Button
@@ -467,7 +507,6 @@ function Devoluciones({ onBack }) {
                 </Flex>
               )}
 
-              {/* Indicador de página actual */}
               <Text textAlign="center" fontSize="sm" color="gray.600">
                 Mostrando {fechasPaginadas.length} de {todasLasFechas.length} fechas
               </Text>
@@ -476,13 +515,16 @@ function Devoluciones({ onBack }) {
         </VStack>
       </Container>
 
-      {/* Modal para Agregar/Editar */}
+      {/* Modal */}
       <DevolucionModal
         isOpen={isOpen}
         onClose={onClose}
         onSave={handleSaveDevolucion}
         devolucion={selectedDevolucion}
       />
+
+      {/* Indicador flotante offline/sync */}
+      <OfflineIndicator onSyncComplete={loadDevoluciones} />
     </Box>
   );
 }
