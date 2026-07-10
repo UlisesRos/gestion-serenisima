@@ -19,7 +19,7 @@ import {
   Divider,
   Flex
 } from '@chakra-ui/react';
-import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
+import { AddIcon, DeleteIcon, EditIcon, CheckIcon } from '@chakra-ui/icons';
 
 function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
   const [nombreCliente, setNombreCliente] = useState('');
@@ -27,13 +27,12 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
   const [currentProducto, setCurrentProducto] = useState({
     codigo: '',
     cantidad: '',
-    descripcion: '',
   });
+  const [editingProductoIndex, setEditingProductoIndex] = useState(null);
 
   const nombreRef = useRef(null);
   const codigoRef = useRef(null);
   const cantidadRef = useRef(null);
-  const descripcionRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -41,12 +40,13 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
         // eslint-disable-next-line
         setNombreCliente(devolucion.nombreCliente);
         setProductos(devolucion.productos || []);
-        setCurrentProducto({ codigo: '', cantidad: '', descripcion: '' });
+        setCurrentProducto({ codigo: '', cantidad: '' });
       } else {
         setNombreCliente('');
         setProductos([]);
-        setCurrentProducto({ codigo: '', cantidad: '', descripcion: '' });
+        setCurrentProducto({ codigo: '', cantidad: '' });
       }
+      setEditingProductoIndex(null);
     }
   }, [devolucion, isOpen]);
 
@@ -56,11 +56,52 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
       return;
     }
 
-    setProductos([...productos, { ...currentProducto }]);
-    setCurrentProducto({ codigo: '', cantidad: '', descripcion: '' });
-    
+    if (editingProductoIndex !== null) {
+      // Modo edición directa de un ítem existente
+      const actualizados = [...productos];
+      actualizados[editingProductoIndex] = {
+        ...actualizados[editingProductoIndex],
+        codigo: currentProducto.codigo,
+        cantidad: currentProducto.cantidad,
+      };
+      setProductos(actualizados);
+      setEditingProductoIndex(null);
+    } else {
+      // Verificar si el código ya existe
+      const indiceExistente = productos.findIndex(p => p.codigo === currentProducto.codigo);
+      if (indiceExistente !== -1) {
+        // Actualizar cantidad del existente
+        const actualizados = [...productos];
+        actualizados[indiceExistente] = {
+          ...actualizados[indiceExistente],
+          cantidad: currentProducto.cantidad,
+        };
+        setProductos(actualizados);
+      } else {
+        // Nuevo código: agregar
+        setProductos([...productos, { ...currentProducto }]);
+      }
+    }
+
+    setCurrentProducto({ codigo: '', cantidad: '' });
+
     // Volver el foco al campo de código
     setTimeout(() => codigoRef.current?.focus(), 100);
+  };
+
+  const handleEditProductoEnLista = (index) => {
+    const producto = productos[index];
+    setCurrentProducto({
+      codigo: producto.codigo,
+      cantidad: producto.cantidad.toString(),
+    });
+    setEditingProductoIndex(index);
+    setTimeout(() => codigoRef.current?.focus(), 100);
+  };
+
+  const handleCancelarEdicionEnLista = () => {
+    setEditingProductoIndex(null);
+    setCurrentProducto({ codigo: '', cantidad: '' });
   };
 
   const handleDeleteProducto = (index) => {
@@ -70,7 +111,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
   const handleKeyPress = (e, nextRef, action) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      
+
       if (action === 'addProducto') {
         handleAddProducto();
       } else if (nextRef && nextRef.current) {
@@ -79,7 +120,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!nombreCliente.trim()) {
       alert('Debes ingresar el nombre del cliente');
       return;
@@ -90,28 +131,30 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
       return;
     }
 
-    onSave({
-      nombreCliente: nombreCliente.trim(),
-      productos: productos,
-    });
-
-    // Resetear
-    setNombreCliente('');
-    setProductos([]);
-    setCurrentProducto({ codigo: '', cantidad: '', descripcion: '' });
+    try {
+      await onSave({
+        nombreCliente: nombreCliente.trim(),
+        productos: productos,
+      });
+      // Éxito: el padre llama a onClose(), el reset ocurre en handleClose o en el useEffect al próximo open.
+    } catch {
+      // El error ya se mostró con toast desde el padre.
+      // El modal queda abierto con todos los datos intactos para reintentar.
+    }
   };
 
   const handleClose = () => {
     setNombreCliente('');
     setProductos([]);
-    setCurrentProducto({ codigo: '', cantidad: '', descripcion: '' });
+    setCurrentProducto({ codigo: '', cantidad: '' });
+    setEditingProductoIndex(null);
     onClose();
   };
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={handleClose} 
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
       size={{ base: 'full', md: 'xl' }}
       scrollBehavior="inside"
     >
@@ -121,10 +164,10 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
           {devolucion ? 'Editar Devolución' : 'Agregar Devolución'}
         </ModalHeader>
         <ModalCloseButton />
-        
+
         <ModalBody>
           <VStack spacing={6} align="stretch">
-            
+
             {/* Nombre del Cliente */}
             <FormControl isRequired>
               <FormLabel>Nombre del Cliente</FormLabel>
@@ -146,14 +189,26 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
               <Text fontWeight="bold" mb={3}>
                 Agregar Productos
               </Text>
-              
+
               <VStack spacing={3} align="stretch">
                 <FormControl isRequired>
                   <FormLabel fontSize="sm">Código</FormLabel>
                   <Input
                     ref={codigoRef}
                     value={currentProducto.codigo}
-                    onChange={(e) => setCurrentProducto({ ...currentProducto, codigo: e.target.value })}
+                    onChange={(e) => {
+                      const nuevoCodigo = e.target.value;
+                      const existente = productos.find(p => p.codigo === nuevoCodigo);
+                      if (existente) {
+                        setCurrentProducto({
+                          ...currentProducto,
+                          codigo: nuevoCodigo,
+                          cantidad: existente.cantidad.toString(),
+                        });
+                      } else {
+                        setCurrentProducto({ ...currentProducto, codigo: nuevoCodigo });
+                      }
+                    }}
                     onKeyPress={(e) => handleKeyPress(e, cantidadRef)}
                     placeholder="Ej: 3480"
                     type="text"
@@ -165,33 +220,39 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                   <Input
                     ref={cantidadRef}
                     value={currentProducto.cantidad}
-                    onChange={(e) => setCurrentProducto({ ...currentProducto, cantidad: e.target.value })}
-                    onKeyPress={(e) => handleKeyPress(e, descripcionRef)}
+                    onChange={(e) => {
+                      const soloNumeros = e.target.value.replace(/\D/g, '');
+                      setCurrentProducto({ ...currentProducto, cantidad: soloNumeros });
+                    }}
+                    onKeyPress={(e) => handleKeyPress(e, null, 'addProducto')}
                     placeholder="Ej: 2"
                     type="text"
-                    min="1"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
                 </FormControl>
 
-                <FormControl>
-                  <FormLabel fontSize="sm">Descripción (opcional)</FormLabel>
-                  <Input
-                    ref={descripcionRef}
-                    value={currentProducto.descripcion}
-                    onChange={(e) => setCurrentProducto({ ...currentProducto, descripcion: e.target.value })}
-                    onKeyPress={(e) => handleKeyPress(e, null, 'addProducto')}
-                    placeholder="Ej: Rotos, Vencidos, etc."
-                  />
-                </FormControl>
-
-                <Button
-                  leftIcon={<AddIcon />}
-                  colorScheme="secondary"
-                  onClick={handleAddProducto}
-                  size="sm"
-                >
-                  Agregar Producto
-                </Button>
+                <HStack>
+                  <Button
+                    leftIcon={editingProductoIndex !== null ? <CheckIcon /> : <AddIcon />}
+                    colorScheme={editingProductoIndex !== null ? 'blue' : 'secondary'}
+                    onClick={handleAddProducto}
+                    size="sm"
+                    flex={1}
+                  >
+                    {editingProductoIndex !== null ? 'Actualizar Producto' : 'Agregar Producto'}
+                  </Button>
+                  {editingProductoIndex !== null && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      colorScheme="red"
+                      onClick={handleCancelarEdicionEnLista}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
+                </HStack>
               </VStack>
             </Box>
 
@@ -201,7 +262,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                 <Text fontWeight="bold" mb={3}>
                   Productos agregados ({productos.length})
                 </Text>
-                
+
                 <VStack spacing={2} align="stretch">
                   {productos.map((producto, index) => (
                     <Flex
@@ -219,21 +280,26 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
                           <Text fontWeight="bold">{producto.codigo}</Text>
                           <Text color="gray.600">x{producto.cantidad}</Text>
                         </HStack>
-                        {producto.descripcion && (
-                          <Text fontSize="sm" color="gray.500" fontStyle="italic">
-                            {producto.descripcion}
-                          </Text>
-                        )}
                       </VStack>
-                      
-                      <IconButton
-                        icon={<DeleteIcon />}
-                        size="sm"
-                        colorScheme="red"
-                        variant="ghost"
-                        onClick={() => handleDeleteProducto(index)}
-                        aria-label="Eliminar producto"
-                      />
+
+                      <HStack spacing={1}>
+                        <IconButton
+                          icon={<EditIcon />}
+                          size="xs"
+                          colorScheme="blue"
+                          variant="ghost"
+                          onClick={() => handleEditProductoEnLista(index)}
+                          aria-label="Editar producto"
+                        />
+                        <IconButton
+                          icon={<DeleteIcon />}
+                          size="sm"
+                          colorScheme="red"
+                          variant="ghost"
+                          onClick={() => handleDeleteProducto(index)}
+                          aria-label="Eliminar producto"
+                        />
+                      </HStack>
                     </Flex>
                   ))}
                 </VStack>
@@ -246,8 +312,8 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
           <Button variant="ghost" mr={3} onClick={handleClose}>
             Cancelar
           </Button>
-          <Button 
-            colorScheme="primary" 
+          <Button
+            colorScheme="primary"
             onClick={handleSubmit}
             isDisabled={!nombreCliente || productos.length === 0}
           >

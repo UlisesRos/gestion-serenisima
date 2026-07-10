@@ -123,14 +123,15 @@ function Devoluciones({ onBack }) {
         });
       }
       onClose();
-    } catch {
+    } catch (error) {
       toast({
         title: 'Error al guardar',
-        description: 'No se pudo guardar la devolución',
+        description: 'No se pudo guardar. Los datos quedaron en el formulario para que puedas intentarlo de nuevo.',
         status: 'error',
-        duration: 3000,
+        duration: 4000,
         isClosable: true,
       });
+      throw error; // Re-lanzar para que DevolucionModal detecte el fallo y no resetee el estado
     }
   };
 
