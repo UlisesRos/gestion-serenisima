@@ -11,6 +11,8 @@ import {
   FormControl,
   FormLabel,
   Input,
+  InputGroup,
+  InputRightElement,
   VStack,
   HStack,
   IconButton,
@@ -29,6 +31,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
     cantidad: '',
   });
   const [editingProductoIndex, setEditingProductoIndex] = useState(null);
+  const [codigoInputMode, setCodigoInputMode] = useState('numeric'); // teclado del campo Código: 'numeric' | 'text'
 
   const nombreRef = useRef(null);
   const codigoRef = useRef(null);
@@ -47,6 +50,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
         setCurrentProducto({ codigo: '', cantidad: '' });
       }
       setEditingProductoIndex(null);
+      setCodigoInputMode('numeric');
     }
   }, [devolucion, isOpen]);
 
@@ -84,6 +88,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
     }
 
     setCurrentProducto({ codigo: '', cantidad: '' });
+    setCodigoInputMode('numeric');
 
     // Volver el foco al campo de código
     setTimeout(() => codigoRef.current?.focus(), 100);
@@ -102,6 +107,18 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
   const handleCancelarEdicionEnLista = () => {
     setEditingProductoIndex(null);
     setCurrentProducto({ codigo: '', cantidad: '' });
+    setCodigoInputMode('numeric');
+  };
+
+  // Alternar el teclado del campo Código entre numérico y de letras (móvil)
+  const toggleCodigoKeyboard = () => {
+    setCodigoInputMode((prev) => (prev === 'numeric' ? 'text' : 'numeric'));
+    // Forzar que el teclado del móvil se actualice: desenfocar y volver a enfocar
+    const input = codigoRef.current;
+    if (input) {
+      input.blur();
+      setTimeout(() => input.focus(), 50);
+    }
   };
 
   const handleDeleteProducto = (index) => {
@@ -148,6 +165,7 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
     setProductos([]);
     setCurrentProducto({ codigo: '', cantidad: '' });
     setEditingProductoIndex(null);
+    setCodigoInputMode('numeric');
     onClose();
   };
 
@@ -193,26 +211,43 @@ function DevolucionModal({ isOpen, onClose, onSave, devolucion }) {
               <VStack spacing={3} align="stretch">
                 <FormControl isRequired>
                   <FormLabel fontSize="sm">Código</FormLabel>
-                  <Input
-                    ref={codigoRef}
-                    value={currentProducto.codigo}
-                    onChange={(e) => {
-                      const nuevoCodigo = e.target.value;
-                      const existente = productos.find(p => p.codigo === nuevoCodigo);
-                      if (existente) {
-                        setCurrentProducto({
-                          ...currentProducto,
-                          codigo: nuevoCodigo,
-                          cantidad: existente.cantidad.toString(),
-                        });
-                      } else {
-                        setCurrentProducto({ ...currentProducto, codigo: nuevoCodigo });
-                      }
-                    }}
-                    onKeyPress={(e) => handleKeyPress(e, cantidadRef)}
-                    placeholder="Ej: 3480"
-                    type="text"
-                  />
+                  <InputGroup>
+                    <Input
+                      ref={codigoRef}
+                      value={currentProducto.codigo}
+                      onChange={(e) => {
+                        const nuevoCodigo = e.target.value;
+                        const existente = productos.find(p => p.codigo === nuevoCodigo);
+                        if (existente) {
+                          setCurrentProducto({
+                            ...currentProducto,
+                            codigo: nuevoCodigo,
+                            cantidad: existente.cantidad.toString(),
+                          });
+                        } else {
+                          setCurrentProducto({ ...currentProducto, codigo: nuevoCodigo });
+                        }
+                      }}
+                      onKeyPress={(e) => handleKeyPress(e, cantidadRef)}
+                      placeholder="Ej: 3480"
+                      type="text"
+                      inputMode={codigoInputMode}
+                      pattern={codigoInputMode === 'numeric' ? '[0-9]*' : undefined}
+                      pr="3.5rem"
+                    />
+                    <InputRightElement width="3.5rem">
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        colorScheme="primary"
+                        onClick={toggleCodigoKeyboard}
+                        tabIndex={-1}
+                        aria-label={codigoInputMode === 'numeric' ? 'Cambiar a teclado de letras' : 'Cambiar a teclado numérico'}
+                      >
+                        {codigoInputMode === 'numeric' ? 'ABC' : '123'}
+                      </Button>
+                    </InputRightElement>
+                  </InputGroup>
                 </FormControl>
 
                 <FormControl isRequired>
