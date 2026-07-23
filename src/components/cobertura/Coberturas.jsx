@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Container,
@@ -22,8 +22,28 @@ import {
   Progress,
   Divider,
   SimpleGrid,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from '@chakra-ui/react';
-import { ArrowBackIcon, AddIcon, SearchIcon, EditIcon, DeleteIcon, CheckCircleIcon } from '@chakra-ui/icons';
+import {
+  ArrowBackIcon,
+  AddIcon,
+  SearchIcon,
+  EditIcon,
+  DeleteIcon,
+  CheckCircleIcon,
+  AttachmentIcon,
+  WarningIcon,
+} from '@chakra-ui/icons';
 import ClienteModal from './ClienteModal';
 import { coberturasService } from '../../services/coberturasService';
 
@@ -35,7 +55,20 @@ function Coberturas({ onBack, onVerProductos }) {
   const [coberturaFilter, setCoberturaFilter] = useState('todos');
   const [selectedCliente, setSelectedCliente] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+
+  // Estados para importación de PDF
+  const [importandoDanone, setImportandoDanone] = useState(false);
+  const [importandoMastellone, setImportandoMastellone] = useState(false);
+
+  // Modal de borrar todo
+  const [showBorrarModal, setShowBorrarModal] = useState(false);
+  const [confirmTexto, setConfirmTexto] = useState('');
+  const [borrando, setBorrando] = useState(false);
+
+  // Refs para los inputs de archivo (ocultos)
+  const inputDanoneRef = useRef(null);
+  const inputMastelloneRef = useRef(null);
+
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
@@ -70,7 +103,99 @@ function Coberturas({ onBack, onVerProductos }) {
     }
   };
 
-  // Determinar el tipo de cobertura de un cliente
+  // ==================== IMPORTAR PDF ====================
+
+  const handleImportarPDF = async (empresa, archivo) => {
+    if (!archivo) return;
+    if (!archivo.name.toLowerCase().endsWith('.pdf')) {
+      toast({
+        title: 'Archivo inválido',
+        description: 'Solo se aceptan archivos PDF',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    const setImportando = empresa === 'danone' ? setImportandoDanone : setImportandoMastellone;
+    setImportando(true);
+
+    try {
+      const resultado = await coberturasService.importarPDF(empresa, archivo);
+
+      const nombreEmpresa = empresa === 'danone' ? '🥛 Danone' : '🧀 Mastellone';
+
+      toast({
+        title: `PDF ${nombreEmpresa} importado`,
+        description: (
+          <VStack align="start" spacing={0}>
+            <Text>✅ {resultado.clientesProcesados} clientes procesados</Text>
+            {resultado.codigosCompletados > 0 && (
+              <Text>🏁 {resultado.codigosCompletados} códigos marcados como completados</Text>
+            )}
+            {resultado.codigosAgregados > 0 && (
+              <Text>➕ {resultado.codigosAgregados} códigos nuevos agregados</Text>
+            )}
+          </VStack>
+        ),
+        status: 'success',
+        duration: 6000,
+        isClosable: true,
+      });
+
+      loadClientes();
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: 'Error al importar PDF',
+        description: error.message || 'No se pudo procesar el archivo',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setImportando(false);
+      // Limpiar el input para permitir cargar el mismo archivo otra vez
+      if (empresa === 'danone' && inputDanoneRef.current) inputDanoneRef.current.value = '';
+      if (empresa === 'mastellone' && inputMastelloneRef.current) inputMastelloneRef.current.value = '';
+    }
+  };
+
+  // ==================== BORRAR TODO ====================
+
+  const handleBorrarTodo = async () => {
+    if (confirmTexto !== 'BORRAR') return;
+
+    setBorrando(true);
+    try {
+      const resultado = await coberturasService.borrarTodo();
+      toast({
+        title: 'Datos eliminados',
+        description: `Se eliminaron ${resultado.eliminados} clientes`,
+        status: 'info',
+        duration: 4000,
+        isClosable: true,
+      });
+      setClientes([]);
+      setShowBorrarModal(false);
+      setConfirmTexto('');
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: 'Error al borrar',
+        description: 'No se pudieron eliminar los datos',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setBorrando(false);
+    }
+  };
+
+  // ==================== FILTROS Y UTILS ====================
+
   const getTipoCobertura = (cliente) => {
     const tieneDanone = cliente.productosDanone.length > 0;
     const tieneMastellone = cliente.productosMastellone.length > 0;
@@ -95,7 +220,6 @@ function Coberturas({ onBack, onVerProductos }) {
       filtered = filtered.filter((cliente) => cliente.frecuencia === frecuenciaFilter);
     }
 
-    // Filtro por tipo de cobertura
     if (coberturaFilter !== 'todos') {
       filtered = filtered.filter((cliente) => {
         const tipo = getTipoCobertura(cliente);
@@ -122,26 +246,14 @@ function Coberturas({ onBack, onVerProductos }) {
 
   const handleDeleteCliente = async (id, e) => {
     e.stopPropagation();
-    
     if (window.confirm('¿Estás seguro de eliminar este cliente?')) {
       try {
         await coberturasService.deleteCliente(id);
-        toast({
-          title: 'Cliente eliminado',
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
+        toast({ title: 'Cliente eliminado', status: 'success', duration: 2000, isClosable: true });
         loadClientes();
       } catch (error) {
         console.error(error);
-        toast({
-          title: 'Error al eliminar',
-          description: 'No se pudo eliminar el cliente',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
+        toast({ title: 'Error al eliminar', status: 'error', duration: 3000, isClosable: true });
       }
     }
   };
@@ -150,32 +262,16 @@ function Coberturas({ onBack, onVerProductos }) {
     try {
       if (selectedCliente) {
         await coberturasService.updateCliente(selectedCliente._id, clienteData);
-        toast({
-          title: 'Cliente actualizado',
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
+        toast({ title: 'Cliente actualizado', status: 'success', duration: 2000, isClosable: true });
       } else {
         await coberturasService.createCliente(clienteData);
-        toast({
-          title: 'Cliente agregado',
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
+        toast({ title: 'Cliente agregado', status: 'success', duration: 2000, isClosable: true });
       }
       loadClientes();
       onClose();
     } catch (error) {
       console.error(error);
-      toast({
-        title: 'Error al guardar',
-        description: 'No se pudo guardar el cliente',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
+      toast({ title: 'Error al guardar', status: 'error', duration: 3000, isClosable: true });
     }
   };
 
@@ -183,57 +279,48 @@ function Coberturas({ onBack, onVerProductos }) {
     onVerProductos(cliente);
   };
 
+  // ==================== CÁLCULOS ====================
+
   const calcularPorcentajeCliente = (cliente) => {
     const totalProductos = cliente.productosDanone.length + cliente.productosMastellone.length;
     if (totalProductos === 0) return 0;
-    
-    const completados = 
+    const completados =
       cliente.productosDanone.filter(p => p.completado).length +
       cliente.productosMastellone.filter(p => p.completado).length;
-    
     return Math.round((completados / totalProductos) * 100);
   };
 
-  // Calcular porcentaje total general
   const calcularPorcentajeTotal = () => {
     let totalProductos = 0;
     let totalCompletados = 0;
-
     filteredClientes.forEach(cliente => {
       totalProductos += cliente.productosDanone.length + cliente.productosMastellone.length;
-      totalCompletados += 
+      totalCompletados +=
         cliente.productosDanone.filter(p => p.completado).length +
         cliente.productosMastellone.filter(p => p.completado).length;
     });
-
     if (totalProductos === 0) return 0;
     return Math.round((totalCompletados / totalProductos) * 100);
   };
 
-  // Calcular porcentaje solo de Danone
   const calcularPorcentajeDanone = () => {
     let total = 0;
     let completados = 0;
-
     filteredClientes.forEach(cliente => {
       total += cliente.productosDanone.length;
       completados += cliente.productosDanone.filter(p => p.completado).length;
     });
-
     if (total === 0) return { porcentaje: 0, completados, total };
     return { porcentaje: Math.round((completados / total) * 100), completados, total };
   };
 
-  // Calcular porcentaje solo de Mastellone
   const calcularPorcentajeMastellone = () => {
     let total = 0;
     let completados = 0;
-
     filteredClientes.forEach(cliente => {
       total += cliente.productosMastellone.length;
       completados += cliente.productosMastellone.filter(p => p.completado).length;
     });
-
     if (total === 0) return { porcentaje: 0, completados, total };
     return { porcentaje: Math.round((completados / total) * 100), completados, total };
   };
@@ -263,45 +350,116 @@ function Coberturas({ onBack, onVerProductos }) {
 
       <Container maxW="container.lg" px={4} py={6}>
         <VStack spacing={6} align="stretch">
-          
-          {/* Botón Agregar */}
-          <Button
-            leftIcon={<AddIcon />}
-            colorScheme="secondary"
-            onClick={handleAddCliente}
-            size={{ base: 'md', md: 'lg' }}
-            w="100%"
-          >
-            Agregar Cliente
-          </Button>
 
-          {/* Panel de Progreso General */}
+          {/* ── Panel de importación de PDF ── */}
+          <Box
+            bg="gray.50"
+            border="2px solid"
+            borderColor="gray.200"
+            borderRadius="lg"
+            p={4}
+          >
+            <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={3}>
+              📄 Importar PDF de coberturas
+            </Text>
+
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+              {/* PDF Danone */}
+              <Box>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  ref={inputDanoneRef}
+                  style={{ display: 'none' }}
+                  onChange={(e) => handleImportarPDF('danone', e.target.files[0])}
+                />
+                <Button
+                  leftIcon={importandoDanone ? <Spinner size="sm" /> : <AttachmentIcon />}
+                  onClick={() => inputDanoneRef.current?.click()}
+                  isLoading={importandoDanone}
+                  loadingText="Procesando..."
+                  colorScheme="blue"
+                  variant="outline"
+                  w="100%"
+                  size="md"
+                >
+                  🥛 Cargar PDF Danone
+                </Button>
+              </Box>
+
+              {/* PDF Mastellone */}
+              <Box>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  ref={inputMastelloneRef}
+                  style={{ display: 'none' }}
+                  onChange={(e) => handleImportarPDF('mastellone', e.target.files[0])}
+                />
+                <Button
+                  leftIcon={importandoMastellone ? <Spinner size="sm" /> : <AttachmentIcon />}
+                  onClick={() => inputMastelloneRef.current?.click()}
+                  isLoading={importandoMastellone}
+                  loadingText="Procesando..."
+                  colorScheme="orange"
+                  variant="outline"
+                  w="100%"
+                  size="md"
+                >
+                  🧀 Cargar PDF Mastellone
+                </Button>
+              </Box>
+            </SimpleGrid>
+
+            <Text fontSize="xs" color="gray.400" mt={2}>
+              Si no hay datos, carga todos los clientes y códigos. Si ya hay datos, marca como completados los códigos que ya no están en el PDF.
+            </Text>
+          </Box>
+
+          {/* ── Botones de acción ── */}
+          <HStack spacing={3}>
+            <Button
+              leftIcon={<AddIcon />}
+              colorScheme="secondary"
+              onClick={handleAddCliente}
+              size={{ base: 'md', md: 'lg' }}
+              flex={1}
+            >
+              Agregar Cliente
+            </Button>
+            <Button
+              leftIcon={<DeleteIcon />}
+              colorScheme="red"
+              variant="outline"
+              onClick={() => { setShowBorrarModal(true); setConfirmTexto(''); }}
+              size={{ base: 'md', md: 'lg' }}
+            >
+              Borrar todo
+            </Button>
+          </HStack>
+
+          {/* ── Panel de Progreso General ── */}
           {!isLoading && filteredClientes.length > 0 && (
-            <Box 
-              bg="white" 
-              border="3px solid" 
-              borderColor="secondary.500" 
-              borderRadius="lg" 
+            <Box
+              bg="white"
+              border="3px solid"
+              borderColor="secondary.500"
+              borderRadius="lg"
               p={5}
               shadow="lg"
             >
               <VStack spacing={5}>
-
-                {/* Título general */}
                 <HStack spacing={3} w="100%" justify="center">
                   <Text fontSize={{ base: 'lg', md: 'xl' }} fontWeight="bold" color="accent.900">
                     Progreso Total de Coberturas
                   </Text>
-                  {porcentajeTotal === 100 && (
-                    <CheckCircleIcon w={6} h={6} color="green.500" />
-                  )}
+                  {porcentajeTotal === 100 && <CheckCircleIcon w={6} h={6} color="green.500" />}
                 </HStack>
 
-                {/* Circular general */}
                 <Flex justify="center" align="center" w="100%">
-                  <CircularProgress 
-                    value={porcentajeTotal} 
-                    size="130px" 
+                  <CircularProgress
+                    value={porcentajeTotal}
+                    size="130px"
                     thickness="14px"
                     color={porcentajeTotal === 100 ? 'green.400' : 'secondary.500'}
                   >
@@ -312,9 +470,9 @@ function Coberturas({ onBack, onVerProductos }) {
                 </Flex>
 
                 <Box w="100%">
-                  <Progress 
-                    value={porcentajeTotal} 
-                    size="lg" 
+                  <Progress
+                    value={porcentajeTotal}
+                    size="lg"
                     colorScheme={porcentajeTotal === 100 ? 'green' : 'secondary'}
                     borderRadius="full"
                     hasStripe
@@ -324,19 +482,21 @@ function Coberturas({ onBack, onVerProductos }) {
 
                 <HStack spacing={4} fontSize="sm" color="gray.600">
                   <Text>
-                    <strong>{filteredClientes.length}</strong> {filteredClientes.length === 1 ? 'cliente' : 'clientes'}
+                    <strong>{filteredClientes.length}</strong>{' '}
+                    {filteredClientes.length === 1 ? 'cliente' : 'clientes'}
                   </Text>
                   <Text>•</Text>
                   <Text>
-                    <strong>{filteredClientes.filter(c => calcularPorcentajeCliente(c) === 100).length}</strong> completados
+                    <strong>
+                      {filteredClientes.filter(c => calcularPorcentajeCliente(c) === 100).length}
+                    </strong>{' '}
+                    completados
                   </Text>
                 </HStack>
 
                 <Divider />
 
-                {/* Desglose Danone / Mastellone */}
                 <SimpleGrid columns={2} spacing={4} w="100%">
-                  
                   {/* Danone */}
                   <Box
                     bg="blue.50"
@@ -350,9 +510,9 @@ function Coberturas({ onBack, onVerProductos }) {
                       🥛 Danone
                     </Text>
                     <Flex justify="center" mb={3}>
-                      <CircularProgress 
-                        value={danoneStats.porcentaje} 
-                        size="80px" 
+                      <CircularProgress
+                        value={danoneStats.porcentaje}
+                        size="80px"
                         thickness="10px"
                         color={danoneStats.porcentaje === 100 ? 'green.400' : 'blue.400'}
                       >
@@ -361,9 +521,9 @@ function Coberturas({ onBack, onVerProductos }) {
                         </CircularProgressLabel>
                       </CircularProgress>
                     </Flex>
-                    <Progress 
-                      value={danoneStats.porcentaje} 
-                      size="sm" 
+                    <Progress
+                      value={danoneStats.porcentaje}
+                      size="sm"
                       colorScheme={danoneStats.porcentaje === 100 ? 'green' : 'blue'}
                       borderRadius="full"
                       mb={2}
@@ -386,9 +546,9 @@ function Coberturas({ onBack, onVerProductos }) {
                       🧀 Mastellone
                     </Text>
                     <Flex justify="center" mb={3}>
-                      <CircularProgress 
-                        value={mastelloneStats.porcentaje} 
-                        size="80px" 
+                      <CircularProgress
+                        value={mastelloneStats.porcentaje}
+                        size="80px"
                         thickness="10px"
                         color={mastelloneStats.porcentaje === 100 ? 'green.400' : 'orange.400'}
                       >
@@ -397,9 +557,9 @@ function Coberturas({ onBack, onVerProductos }) {
                         </CircularProgressLabel>
                       </CircularProgress>
                     </Flex>
-                    <Progress 
-                      value={mastelloneStats.porcentaje} 
-                      size="sm" 
+                    <Progress
+                      value={mastelloneStats.porcentaje}
+                      size="sm"
                       colorScheme={mastelloneStats.porcentaje === 100 ? 'green' : 'orange'}
                       borderRadius="full"
                       mb={2}
@@ -408,13 +568,12 @@ function Coberturas({ onBack, onVerProductos }) {
                       {mastelloneStats.completados} / {mastelloneStats.total} productos
                     </Text>
                   </Box>
-
                 </SimpleGrid>
               </VStack>
             </Box>
           )}
 
-          {/* Filtros */}
+          {/* ── Filtros ── */}
           <VStack spacing={3} align="stretch">
             <InputGroup>
               <InputLeftElement pointerEvents="none">
@@ -444,7 +603,6 @@ function Coberturas({ onBack, onVerProductos }) {
               <option value="MJS">Martes, Jueves, Sábado</option>
             </Select>
 
-            {/* Nuevo filtro por tipo de cobertura */}
             <Select
               value={coberturaFilter}
               onChange={(e) => setCoberturaFilter(e.target.value)}
@@ -460,7 +618,7 @@ function Coberturas({ onBack, onVerProductos }) {
             </Select>
           </VStack>
 
-          {/* Lista de Clientes */}
+          {/* ── Lista de Clientes ── */}
           {isLoading ? (
             <Flex justify="center" py={8}>
               <Spinner size="xl" color="secondary.500" thickness="4px" />
@@ -469,11 +627,10 @@ function Coberturas({ onBack, onVerProductos }) {
             <Text textAlign="center" color="gray.500" py={8}>
               {searchTerm || frecuenciaFilter !== 'todos' || coberturaFilter !== 'todos'
                 ? 'No se encontraron clientes con esos filtros'
-                : 'No hay clientes. ¡Agrega uno!'}
+                : 'No hay clientes. Cargá un PDF o agregá uno manualmente.'}
             </Text>
           ) : (
             <VStack spacing={4} align="stretch" position="relative" pt={4}>
-              {/* Línea vertical del timeline */}
               <Box
                 position="absolute"
                 left={{ base: '20px', md: '30px' }}
@@ -489,10 +646,9 @@ function Coberturas({ onBack, onVerProductos }) {
                 const porcentaje = calcularPorcentajeCliente(cliente);
                 const totalProductos = cliente.productosDanone.length + cliente.productosMastellone.length;
                 const tipo = getTipoCobertura(cliente);
-                
+
                 return (
                   <Flex key={cliente._id} gap={3} position="relative" zIndex={1}>
-                    {/* Número en círculo */}
                     <Box
                       minW={{ base: '40px', md: '50px' }}
                       h={{ base: '40px', md: '50px' }}
@@ -510,7 +666,6 @@ function Coberturas({ onBack, onVerProductos }) {
                       {index + 1}
                     </Box>
 
-                    {/* Card del cliente */}
                     <Box
                       flex={1}
                       bg="white"
@@ -521,13 +676,8 @@ function Coberturas({ onBack, onVerProductos }) {
                       shadow="md"
                       cursor="pointer"
                       transition="all 0.2s"
-                      _hover={{
-                        transform: 'translateY(-2px)',
-                        shadow: 'lg',
-                      }}
-                      _active={{
-                        transform: 'translateY(0)',
-                      }}
+                      _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
+                      _active={{ transform: 'translateY(0)' }}
                       onClick={() => handleClienteClick(cliente)}
                     >
                       <Flex justify="space-between" align="start">
@@ -540,16 +690,14 @@ function Coberturas({ onBack, onVerProductos }) {
                             >
                               {cliente.nombre} {cliente.apellido}
                             </Text>
-                            {porcentaje === 100 && (
-                              <CheckCircleIcon w={5} h={5} color="green.500" />
-                            )}
+                            {porcentaje === 100 && <CheckCircleIcon w={5} h={5} color="green.500" />}
                           </HStack>
-                          
+
                           <HStack spacing={2} mb={2} flexWrap="wrap">
                             <Text fontSize="sm" color="gray.600">
-                              Frecuencia: {cliente.frecuencia === 'LMV' ? 'Lun, Mié, Vie' : 'Mar, Jue, Sáb'}
+                              Frecuencia:{' '}
+                              {cliente.frecuencia === 'LMV' ? 'Lun, Mié, Vie' : 'Mar, Jue, Sáb'}
                             </Text>
-                            {/* Badge de tipo de cobertura */}
                             {(tipo === 'danone' || tipo === 'ambas') && (
                               <Badge colorScheme="blue" fontSize="xs">🥛 Danone</Badge>
                             )}
@@ -558,11 +706,10 @@ function Coberturas({ onBack, onVerProductos }) {
                             )}
                           </HStack>
 
-                          {/* Porcentaje individual */}
                           <HStack spacing={3} align="center" mt={2}>
-                            <CircularProgress 
-                              value={porcentaje} 
-                              size="50px" 
+                            <CircularProgress
+                              value={porcentaje}
+                              size="50px"
                               thickness="8px"
                               color={porcentaje === 100 ? 'green.400' : 'secondary.500'}
                             >
@@ -570,13 +717,14 @@ function Coberturas({ onBack, onVerProductos }) {
                                 {porcentaje}%
                               </CircularProgressLabel>
                             </CircularProgress>
-                            
+
                             <VStack align="start" spacing={0}>
-                              <Badge 
-                                colorScheme={porcentaje === 100 ? 'green' : 'gray'} 
+                              <Badge
+                                colorScheme={porcentaje === 100 ? 'green' : 'gray'}
                                 fontSize="xs"
                               >
-                                {totalProductos} {totalProductos === 1 ? 'producto' : 'productos'}
+                                {totalProductos}{' '}
+                                {totalProductos === 1 ? 'producto' : 'productos'}
                               </Badge>
                               {totalProductos > 0 && (
                                 <Text fontSize="xs" color="gray.500">
@@ -586,11 +734,10 @@ function Coberturas({ onBack, onVerProductos }) {
                             </VStack>
                           </HStack>
 
-                          {/* Barra de progreso */}
                           <Box mt={3}>
-                            <Progress 
-                              value={porcentaje} 
-                              size="sm" 
+                            <Progress
+                              value={porcentaje}
+                              size="sm"
                               colorScheme={porcentaje === 100 ? 'green' : 'secondary'}
                               borderRadius="full"
                               hasStripe={porcentaje < 100}
@@ -599,7 +746,6 @@ function Coberturas({ onBack, onVerProductos }) {
                           </Box>
                         </Box>
 
-                        {/* Botones de acción */}
                         <HStack spacing={1}>
                           <IconButton
                             icon={<EditIcon />}
@@ -628,13 +774,75 @@ function Coberturas({ onBack, onVerProductos }) {
         </VStack>
       </Container>
 
-      {/* Modal para Agregar/Editar */}
+      {/* ── Modal Agregar/Editar Cliente ── */}
       <ClienteModal
         isOpen={isOpen}
         onClose={onClose}
         onSave={handleSaveCliente}
         cliente={selectedCliente}
       />
+
+      {/* ── Modal Borrar Todo ── */}
+      <Modal
+        isOpen={showBorrarModal}
+        onClose={() => { setShowBorrarModal(false); setConfirmTexto(''); }}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent mx={4}>
+          <ModalHeader color="red.600">
+            <HStack>
+              <WarningIcon />
+              <Text>Borrar todos los datos</Text>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Alert status="error" borderRadius="md">
+                <AlertIcon />
+                <Box>
+                  <AlertTitle>Acción irreversible</AlertTitle>
+                  <AlertDescription fontSize="sm">
+                    Se eliminarán todos los clientes y sus códigos. Esta acción no se puede deshacer.
+                  </AlertDescription>
+                </Box>
+              </Alert>
+              <Box>
+                <Text fontSize="sm" color="gray.600" mb={2}>
+                  Escribí <strong>BORRAR</strong> para confirmar:
+                </Text>
+                <Input
+                  value={confirmTexto}
+                  onChange={(e) => setConfirmTexto(e.target.value.toUpperCase())}
+                  placeholder="BORRAR"
+                  border="2px solid"
+                  borderColor={confirmTexto === 'BORRAR' ? 'red.400' : 'gray.200'}
+                  _focus={{ borderColor: 'red.400' }}
+                />
+              </Box>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="ghost"
+              mr={3}
+              onClick={() => { setShowBorrarModal(false); setConfirmTexto(''); }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              colorScheme="red"
+              onClick={handleBorrarTodo}
+              isDisabled={confirmTexto !== 'BORRAR'}
+              isLoading={borrando}
+              loadingText="Borrando..."
+            >
+              Borrar todo
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 }
